@@ -357,13 +357,15 @@ function renderFromOrders(orders) {
         }
 
         // Products (approximate — we only have the primary SKU per order here)
-        const sku = o.sku || 'UNKNOWN';
-        if (!productsMap[sku]) {
-            productsMap[sku] = { sku: sku, name: '', units_sold: 0, revenue: 0, profit: 0 };
+        if (o.status !== 'Canceled') {
+            const sku = o.sku || 'UNKNOWN';
+            if (!productsMap[sku]) {
+                productsMap[sku] = { sku: sku, name: '', units_sold: 0, revenue: 0, profit: 0 };
+            }
+            productsMap[sku].units_sold++;
+            productsMap[sku].revenue += o.sale_price || 0;
+            productsMap[sku].profit += o.profit || 0;
         }
-        productsMap[sku].units_sold++;
-        productsMap[sku].revenue += o.sale_price || 0;
-        productsMap[sku].profit += o.profit || 0;
     }
 
     // Try to fill in product names from original data

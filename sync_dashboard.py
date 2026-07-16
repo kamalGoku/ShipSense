@@ -617,21 +617,19 @@ def sync_data():
             month['cancelled'] += 1
 
         # Product aggregates (combined across platforms)
-        for item in o["items"]:
-            sku = item["sku"]
-            product = products_data.setdefault(sku, {
-                "sku": sku, "name": item["name"], "units_sold": 0, "revenue": 0, "profit": 0
-            })
-            product['units_sold'] += item["quantity"]
-            product['revenue'] += item["line_revenue"]
-            item_cost = product_costs.get(sku, 0.0) * item["quantity"]
-            if o["is_cancelled"]:
-                item_profit = 0
-            else:
+        if not o["is_cancelled"]:
+            for item in o["items"]:
+                sku = item["sku"]
+                product = products_data.setdefault(sku, {
+                    "sku": sku, "name": item["name"], "units_sold": 0, "revenue": 0, "profit": 0
+                })
+                product['units_sold'] += item["quantity"]
+                product['revenue'] += item["line_revenue"]
+                item_cost = product_costs.get(sku, 0.0) * item["quantity"]
                 item_profit = (item["line_revenue"] - item_cost
                                - (o["fees"] / o["num_items"])
                                - (o["shipping_cost"] / o["num_items"]))
-            product['profit'] += item_profit
+                product['profit'] += item_profit
 
         orders_data.append({
             "amazon_order_id": o["id"],
