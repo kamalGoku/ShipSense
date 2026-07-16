@@ -1,0 +1,7 @@
+requests
+python-dotenv
+pytest
+pytest-mock==3.14.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+PyMuPDF

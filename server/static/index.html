@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShipSense Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <div class="logo-icon">🚀</div>
+                <h2>ShipSense</h2>
+            </div>
+            <nav>
+                <ul>
+                    <li class="active" data-view="dashboard">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                        Dashboard
+                    </li>
+                    <li data-view="terminal">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        Terminal Output
+                    </li>
+                    <li data-view="orders">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                        Order State
+                    </li>
+                </ul>
+            </nav>
+            <div class="status-indicator">
+                <span class="dot online"></span>
+                <span class="status-text">System Ready</span>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- View: Dashboard -->
+            <section id="view-dashboard" class="view active">
+                <header>
+                    <h1>Dashboard</h1>
+                    <p>Manage and monitor your synchronization tasks.</p>
+                </header>
+
+                <div class="stats-grid">
+                    <div class="stat-card glass">
+                        <div class="stat-title">Total Processed Orders</div>
+                        <div class="stat-value" id="stat-total">0</div>
+                    </div>
+                    <div class="stat-card glass">
+                        <div class="stat-title">Synced to Amazon</div>
+                        <div class="stat-value text-green" id="stat-synced">0</div>
+                    </div>
+                    <div class="stat-card glass">
+                        <div class="stat-title">Labels Printed</div>
+                        <div class="stat-value text-blue" id="stat-printed">0</div>
+                    </div>
+                    <div class="stat-card glass">
+                        <div class="stat-title">Errors</div>
+                        <div class="stat-value text-red" id="stat-errors">0</div>
+                    </div>
+                </div>
+
+                <div class="actions-grid">
+                    <div class="action-card glass">
+                        <h3>Amazon Workflow</h3>
+                        <p>Sync Amazon orders to SP-API and print labels.</p>
+                        <button class="btn btn-primary" onclick="runCommand('amazon')">Run Full Sync</button>
+                    </div>
+                    <div class="action-card glass">
+                        <h3>Liriya Workflow</h3>
+                        <p>Process WooCommerce orders, skipping SP-API.</p>
+                        <button class="btn btn-accent" onclick="runCommand('liriya')">Run Liriya Sync</button>
+                    </div>
+
+                    <div class="action-card glass">
+                        <h3>Manual Print</h3>
+                        <p>Force download and print a specific label.</p>
+                        <div class="input-group">
+                            <input type="text" id="manual-print-id" placeholder="Order ID or AWB">
+                            <button class="btn btn-secondary" onclick="runManualPrint()">Print</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pending-orders-section glass" style="margin-top: 2rem; padding: 1.5rem; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0;">Pending Orders to Ship</h3>
+                        <div>
+                            <button id="btn-sync-selected" class="btn btn-sm btn-primary" style="margin-right: 0.5rem;" onclick="runSelectedSync()" disabled>Sync Selected</button>
+                            <button class="btn btn-sm btn-secondary" onclick="fetchPendingOrders()">Refresh List</button>
+                        </div>
+                    </header>
+                    <div class="table-container">
+                        <table id="pending-orders-table" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px; padding: 0.75rem;"><input type="checkbox" id="selectAllPending" onclick="toggleAllPending(this)"></th>
+                                    <th style="text-align: left; padding: 0.75rem;">Source</th>
+                                    <th style="text-align: left; padding: 0.75rem;">Order ID</th>
+                                    <th style="text-align: left; padding: 0.75rem;">Date</th>
+                                    <th style="text-align: left; padding: 0.75rem;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pending-orders-body">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 1rem;">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View: Terminal -->
+            <section id="view-terminal" class="view hidden">
+                <header>
+                    <h1>Terminal Output</h1>
+                    <div class="terminal-actions">
+                        <button class="btn btn-sm btn-outline" onclick="clearTerminal()">Clear</button>
+                    </div>
+                </header>
+                <div class="terminal-container glass">
+                    <div class="terminal-window" id="terminal-output">
+                        <div class="log-line text-muted">Awaiting command execution...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View: Orders -->
+            <section id="view-orders" class="view hidden">
+                <header>
+                    <h1>Order State</h1>
+                    <button class="btn btn-sm btn-secondary" onclick="fetchState()">Refresh</button>
+                </header>
+                <div class="table-container glass">
+                    <table id="orders-table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Channel</th>
+                                <th>AWB</th>
+                                <th>Courier</th>
+                                <th>Synced</th>
+                                <th>Printed</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table-body">
+                            <!-- Rows populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+        <div class="toast-icon"></div>
+        <div class="toast-message"></div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

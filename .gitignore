@@ -1,0 +1,16 @@
+# .env contains credentials – never commit!
+.env
+sync_state.json
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+labels/
+scratch/
+freight/*.csv
+!freight/dummy_freight.csv
+logs/
+server/dashboard_data.json
+*.db
+.DS_Store
+product_costs.*
