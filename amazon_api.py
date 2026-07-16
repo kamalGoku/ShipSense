@@ -432,14 +432,14 @@ def fetch_order_finances(amazon_order_id: str) -> dict:
         return {
             "fees": total_amazon_fees,
             "refunds": total_refunds,
-            "fetched": True
+            "fetched": (total_amazon_fees > 0 or total_refunds > 0)
         }
     except Exception as e:
         # 404 typically means no financial events posted yet: real zeros.
         if (isinstance(e, requests.HTTPError)
                 and e.response is not None
                 and e.response.status_code == 404):
-            return {"fees": 0.0, "refunds": 0.0, "fetched": True}
+            return {"fees": 0.0, "refunds": 0.0, "fetched": False}
         # Log status code only, never the response body (PII).
         status = ""
         if isinstance(e, requests.HTTPError) and e.response is not None:

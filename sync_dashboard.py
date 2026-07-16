@@ -304,6 +304,11 @@ def _sync_amazon_to_db(order_db) -> None:
                 time.sleep(2)  # 0.5 req/s limit
                 finances = fetch_order_finances(amz_id)
 
+            if finances is None:
+                finances = {}
+            if 'total' in order:
+                finances['total'] = order['total']
+
             order_db.upsert_order(
                 order_id=amz_id,
                 platform=config.AMAZON_PLATFORM_KEY,
@@ -409,7 +414,11 @@ def _normalize_amazon_order(order, product_costs, freight_costs, awb_index) -> d
         canonical["skip_details"] = True
         return canonical
 
-    sale_price = sum(i['price'] for i in items)
+    finances_safe = order['finances'] or {}
+    if 'total' in finances_safe:
+        sale_price = float(finances_safe['total'])
+    else:
+        sale_price = sum(i['price'] for i in items)
     product_cost = sum(product_costs.get(i['sku'], 0.0) * i['quantity'] for i in items)
 
     fees = 0.0
@@ -417,8 +426,8 @@ def _normalize_amazon_order(order, product_costs, freight_costs, awb_index) -> d
     fees_estimated = False
     if not is_cancelled:
         finances = order['finances'] or {}
-        fees = finances.get('fees', finances.get('total_amazon_fees', 0.0))
-        refunds = finances.get('refunds', finances.get('total_refunds', 0.0))
+        fees = abs(finances.get('fees', finances.get('total_amazon_fees', 0.0)))
+        refunds = abs(finances.get('refunds', finances.get('total_refunds', 0.0)))
         if not _finances_fetched(finances) and sale_price > 0.0:
             # Real fees unavailable: estimate and flag it in the output.
             fees = round(sale_price * config.ESTIMATED_AMAZON_FEE_RATE, 2)
