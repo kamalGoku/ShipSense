@@ -1,4 +1,13 @@
+/**
+ * ShipSense — Revenue Dashboard page logic.
+ *
+ * Depends on sse.js (escapeHtml, apiHeaders, runCommandStream), loaded first.
+ * Renders server-computed aggregates for "All Time"; recomputes locally from
+ * orders[] for date-filtered views (approximate — primary SKU basis).
+ */
+
 document.addEventListener('DOMContentLoaded', () => {
+    showTableSkeletons();
     fetchDashboardData();
 
     document.getElementById('syncBtn').addEventListener('click', triggerSync);
@@ -19,11 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Show/hide custom date range
+            // Show/hide custom date range inputs
             const customPanel = document.getElementById('customDateRange');
             if (range === 'custom') {
                 customPanel.classList.remove('hidden');
-                return; // Don't apply yet, wait for "Apply" click
+                return; // Don't apply yet; wait for "Apply" click
             } else {
                 customPanel.classList.add('hidden');
             }
@@ -34,7 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Custom date range apply
     document.getElementById('applyCustomRange').addEventListener('click', () => {
-        applyCustomRangeFromInputs();
+        if (!applyCustomRangeFromInputs()) {
+            showToast('Select both From and To dates first.', 'warning');
+        }
     });
 
     // Clear filter
@@ -47,6 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 let monthlyChartInstance = null;
+let toastTimer = null;
+
+const TABLE_MAX_ROWS = 15;
+const FEE_ESTIMATED_TITLE = 'Estimated (real data unavailable)';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -90,6 +105,103 @@ function applyCustomRangeFromInputs() {
         return true;
     }
     return false;
+}
+
+function profitClassOf(value) {
+    return value > 0 ? 'positive' : (value < 0 ? 'negative' : 'neutral');
+}
+
+function statusBadgeClass(status) {
+    switch (String(status || '').toLowerCase()) {
+        case 'shipped': return 'badge-success';
+        case 'canceled':
+        case 'cancelled': return 'badge-danger';
+        case 'pending': return 'badge-warning';
+        case 'new': return 'badge-info';
+        default: return 'badge-neutral';
+    }
+}
+
+function platformBadgeClass(platform) {
+    switch (String(platform || '').toLowerCase()) {
+        case 'amazon': return 'badge-platform-amazon';
+        case 'woocommerce': return 'badge-platform-woo';
+        default: return 'badge-neutral';
+    }
+}
+
+function asteriskNote(title) {
+    return ` <span class="fee-estimated" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">*</span>`;
+}
+
+function feeAsterisk(estimated) {
+    return estimated ? asteriskNote(FEE_ESTIMATED_TITLE) : '';
+}
+
+// ─── Toast ──────────────────────────────────────────────────
+
+function showToast(message, kind) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    const icons = {
+        success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>',
+        error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>',
+        warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>'
+    };
+    const k = icons[kind] ? kind : 'info';
+    toast.className = `toast toast-${k}`;
+    toast.innerHTML = `${icons[k]}<span>${escapeHtml(message)}</span>`;
+
+    // Force reflow so the slide-in transition replays
+    void toast.offsetWidth;
+    toast.classList.add('visible');
+
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('visible'), 4000);
+}
+
+// ─── Loading / empty states ─────────────────────────────────
+
+function skeletonRows(cols, rows) {
+    let html = '';
+    for (let r = 0; r < rows; r++) {
+        html += '<tr class="skeleton-row">';
+        for (let c = 0; c < cols; c++) {
+            html += '<td><div class="skeleton"></div></td>';
+        }
+        html += '</tr>';
+    }
+    return html;
+}
+
+function showTableSkeletons() {
+    document.getElementById('platformsTbody').innerHTML = skeletonRows(9, 2);
+    document.getElementById('productsTbody').innerHTML = skeletonRows(4, 5);
+    document.getElementById('ordersTbody').innerHTML = skeletonRows(5, 5);
+}
+
+function emptyRow(cols, message) {
+    return `
+        <tr class="empty-row">
+            <td colspan="${cols}">
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                    <span class="empty-state-text">${escapeHtml(message)}</span>
+                </div>
+            </td>
+        </tr>`;
+}
+
+function setTableFooter(id, shown, total) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (total > shown) {
+        el.textContent = `showing ${shown} of ${total}`;
+        el.classList.remove('hidden');
+    } else {
+        el.classList.add('hidden');
+    }
 }
 
 // ─── Date Range Calculations ────────────────────────────────
@@ -153,7 +265,7 @@ function applyDateFilter(from, to, label) {
         return d >= from && d <= to;
     });
 
-    showFilterTag(`${label}  •  ${filtered.length} order${filtered.length !== 1 ? 's' : ''}  •  approximate (primary SKU basis)`);
+    showFilterTag(`${label} · ${filtered.length} order${filtered.length !== 1 ? 's' : ''} · approximate (primary SKU basis)`);
     renderFromOrders(filtered);
 }
 
@@ -187,7 +299,7 @@ function renderFromServerData() {
 // ─── Recompute & Render All Sections from Orders ────────────
 // Used ONLY for date-range filtered views. The orders[] array carries one
 // row per order with its PRIMARY SKU only, so per-product units/revenue are
-// approximate; the UI labels these views "approximate (primary SKU basis)".
+// approximate; the UI labels these views "(filtered view — primary SKU basis)".
 
 function renderFromOrders(orders) {
     // Recompute summary
@@ -290,6 +402,7 @@ async function fetchDashboardData() {
 
         if (data.error) {
             console.warn(data.error);
+            showToast(String(data.error), 'error');
             return;
         }
 
@@ -314,7 +427,8 @@ async function fetchDashboardData() {
         }
 
     } catch (e) {
-        console.error("Error fetching dashboard data:", e);
+        console.error('Error fetching dashboard data:', e);
+        showToast('Failed to load dashboard data.', 'error');
     }
 }
 
@@ -322,11 +436,20 @@ async function fetchDashboardData() {
 
 function updateSummary(data) {
     const synced = data.last_synced ? new Date(data.last_synced).toLocaleString() : 'Never';
-    document.getElementById('lastSynced').textContent = `Last Synced: ${synced}`;
+    document.getElementById('lastSynced').textContent = `Last synced: ${synced}`;
 
     const s = data.summary || {};
     document.getElementById('valRevenue').textContent = formatCurrency(s.total_revenue);
-    document.getElementById('valProfit').textContent = formatCurrency(s.total_profit);
+
+    const profitEl = document.getElementById('valProfit');
+    profitEl.textContent = formatCurrency(s.total_profit);
+    const profitCard = profitEl.closest('.stat-card');
+    if (profitCard) {
+        profitCard.classList.remove('positive', 'negative');
+        const p = parseFloat(s.total_profit);
+        if (!isNaN(p) && p !== 0) profitCard.classList.add(p > 0 ? 'positive' : 'negative');
+    }
+
     document.getElementById('valShipped').textContent = s.total_shipped || 0;
     document.getElementById('valCancelled').textContent = s.total_cancelled || 0;
     document.getElementById('valShipping').textContent = formatCurrency(s.total_shipping_cost);
@@ -335,40 +458,46 @@ function updateSummary(data) {
 
 function renderPlatformBreakdown(breakdown) {
     const tbody = document.getElementById('platformsTbody');
-    tbody.innerHTML = '';
 
-    if (!breakdown) return;
-
-    for (const [platformName, p] of Object.entries(breakdown)) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><strong>${escapeHtml(platformName)}</strong></td>
-            <td>${escapeHtml(p.orders)}</td>
-            <td>${escapeHtml(p.shipped)}</td>
-            <td>${escapeHtml(p.cancelled)}</td>
-            <td>${formatCurrency(p.revenue)}</td>
-            <td>${formatCurrency(p.fees)}</td>
-            <td class="negative">${p.cancellation_fees ? formatCurrency(p.cancellation_fees) : '₹0.00'}</td>
-            <td>${formatCurrency(p.shipping_cost)}</td>
-            <td class="${p.profit > 0 ? 'positive' : (p.profit < 0 ? 'negative' : 'neutral')}">${formatCurrency(p.profit)}</td>
-        `;
-        tbody.appendChild(tr);
+    const entries = Object.entries(breakdown || {});
+    if (entries.length === 0) {
+        tbody.innerHTML = emptyRow(9, 'No platform data. Run a sync to load orders.');
+        return;
     }
+
+    // Sort by profit descending
+    entries.sort((a, b) => (b[1].profit || 0) - (a[1].profit || 0));
+
+    tbody.innerHTML = entries.map(([platformName, p]) => `
+        <tr>
+            <td><span class="badge ${platformBadgeClass(platformName)}">${escapeHtml(platformName)}</span></td>
+            <td class="number">${escapeHtml(p.orders)}</td>
+            <td class="number">${escapeHtml(p.shipped)}</td>
+            <td class="number">${escapeHtml(p.cancelled)}</td>
+            <td class="number">${formatCurrency(p.revenue)}</td>
+            <td class="number">${formatCurrency(p.fees)}</td>
+            <td class="number negative">${p.cancellation_fees ? formatCurrency(p.cancellation_fees) : '₹0.00'}</td>
+            <td class="number">${formatCurrency(p.shipping_cost)}</td>
+            <td class="number ${profitClassOf(p.profit)}">${formatCurrency(p.profit)}</td>
+        </tr>
+    `).join('');
 }
 
 function renderChart(monthlyData) {
     const canvas = document.getElementById('monthlyChart');
     if (!canvas) return;
 
+    const wrap = canvas.parentElement;
+
     // Guard: Chart.js is loaded from a CDN and may be unavailable (offline,
     // CDN failure). Degrade gracefully so table rendering still proceeds.
     if (typeof Chart === 'undefined') {
-        const container = canvas.parentElement;
-        if (container && !container.querySelector('.chart-unavailable-note')) {
-            const note = document.createElement('p');
-            note.className = 'chart-unavailable-note neutral';
-            note.textContent = 'Chart unavailable (Chart.js failed to load).';
-            container.appendChild(note);
+        if (wrap && !wrap.querySelector('.empty-state')) {
+            canvas.classList.add('hidden');
+            const note = document.createElement('div');
+            note.className = 'empty-state';
+            note.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg><span class="empty-state-title">Chart unavailable</span><span class="empty-state-text">Chart.js failed to load.</span>';
+            wrap.appendChild(note);
         }
         return;
     }
@@ -386,45 +515,77 @@ function renderChart(monthlyData) {
         monthlyChartInstance.destroy();
     }
 
+    const styles = getComputedStyle(document.documentElement);
+    const borderColor = (styles.getPropertyValue('--border') || '#DBEAFE').trim();
+    const mutedText = (styles.getPropertyValue('--text-muted') || '#64748B').trim();
+    const fontFamily = '"Fira Sans", sans-serif';
+
     monthlyChartInstance = new Chart(ctx, {
-        type: 'bar',
+        type: 'line',
         data: {
             labels: labels,
             datasets: [
                 {
                     label: 'Revenue',
                     data: revenue,
-                    backgroundColor: 'rgba(59, 130, 246, 0.5)',
-                    borderColor: 'rgb(59, 130, 246)',
-                    borderWidth: 1,
-                    borderRadius: 4
+                    borderColor: '#1E40AF',
+                    backgroundColor: 'rgba(30, 64, 175, 0.10)',
+                    fill: true,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#1E40AF'
                 },
                 {
                     label: 'Profit',
                     data: profit,
-                    type: 'line',
-                    borderColor: 'rgb(16, 185, 129)',
-                    backgroundColor: 'rgb(16, 185, 129)',
-                    borderWidth: 3,
+                    borderColor: '#16A34A',
+                    backgroundColor: 'rgba(22, 163, 74, 0.10)',
+                    fill: true,
+                    borderWidth: 2,
                     tension: 0.3,
-                    pointBackgroundColor: '#0f172a'
+                    pointRadius: 3,
+                    pointBackgroundColor: '#16A34A'
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { labels: { color: '#f8fafc' } }
+                legend: {
+                    labels: {
+                        color: '#1E3A8A',
+                        font: { family: fontFamily, size: 12 },
+                        boxWidth: 12,
+                        boxHeight: 12
+                    }
+                },
+                tooltip: {
+                    backgroundColor: '#1E3A8A',
+                    titleFont: { family: fontFamily },
+                    bodyFont: { family: fontFamily },
+                    callbacks: {
+                        label: (context) => `${context.dataset.label}: ${formatCurrency(context.parsed.y)}`
+                    }
+                }
             },
             scales: {
                 y: {
-                    grid: { color: 'rgba(255,255,255,0.1)' },
-                    ticks: { color: '#94a3b8' }
+                    grid: { color: borderColor },
+                    ticks: {
+                        color: mutedText,
+                        font: { family: fontFamily, size: 11 },
+                        callback: (value) => formatCurrency(value)
+                    }
                 },
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#94a3b8' }
+                    ticks: {
+                        color: mutedText,
+                        font: { family: fontFamily, size: 11 }
+                    }
                 }
             }
         }
@@ -433,31 +594,44 @@ function renderChart(monthlyData) {
 
 function renderProducts(products, approximate) {
     const tbody = document.getElementById('productsTbody');
-    tbody.innerHTML = '';
+    const approxNote = document.getElementById('productsApproxNote');
+    approxNote.classList.toggle('hidden', !approximate);
+
+    if (!products || products.length === 0) {
+        tbody.innerHTML = emptyRow(4, 'No product data yet.');
+        setTableFooter('productsFooter', 0, 0);
+        return;
+    }
 
     // Sort by revenue
     products.sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
 
-    products.slice(0, 10).forEach(p => {
-        const tr = document.createElement('tr');
-        const approxMark = approximate
-            ? ' <span class="neutral" title="Approximate: computed from each order’s primary SKU only">*</span>'
-            : '';
-        tr.innerHTML = `
-            <td>${escapeHtml(p.sku)}${approxMark}<br><small class="neutral">${escapeHtml(p.name || '')}</small></td>
-            <td>${escapeHtml(p.units_sold)}</td>
-            <td>${formatCurrency(p.revenue)}</td>
-            <td class="${p.profit > 0 ? 'positive' : (p.profit < 0 ? 'negative' : 'neutral')}">${formatCurrency(p.profit)}</td>
-        `;
-        tbody.appendChild(tr);
-    });
+    const shown = products.slice(0, TABLE_MAX_ROWS);
+    tbody.innerHTML = shown.map(p => `
+        <tr>
+            <td>
+                <span class="mono">${escapeHtml(p.sku)}</span>${approximate ? asteriskNote('Approximate: computed from each order’s primary SKU only') : ''}
+                ${p.name ? `<br><small class="text-muted">${escapeHtml(p.name)}</small>` : ''}
+            </td>
+            <td class="number">${escapeHtml(p.units_sold)}</td>
+            <td class="number">${formatCurrency(p.revenue)}</td>
+            <td class="number ${profitClassOf(p.profit)}">${formatCurrency(p.profit)}</td>
+        </tr>
+    `).join('');
+
+    setTableFooter('productsFooter', shown.length, products.length);
 }
 
 function renderOrders(orders) {
     const tbody = document.getElementById('ordersTbody');
-    tbody.innerHTML = '';
 
-    // Sort by date descending, then show last 50
+    if (!orders || orders.length === 0) {
+        tbody.innerHTML = emptyRow(5, 'No orders in this range. Try widening the timeline or run a sync.');
+        setTableFooter('ordersFooter', 0, 0);
+        return;
+    }
+
+    // Sort by date descending
     const sorted = [...orders].sort((a, b) => {
         if (!a.date && !b.date) return 0;
         if (!a.date) return 1;
@@ -465,25 +639,21 @@ function renderOrders(orders) {
         return new Date(b.date) - new Date(a.date);
     });
 
-    sorted.slice(0, 50).forEach(o => {
-        const tr = document.createElement('tr');
-        const statusClass = 'status-' + escapeHtml(o.status);
-        const profitClass = o.profit > 0 ? 'positive' : (o.profit < 0 ? 'negative' : 'neutral');
-        // fees_estimated: backend flag meaning the fees are an estimate,
-        // not actual settlement data — surface it with an asterisk/tooltip.
-        const feeNote = o.fees_estimated
-            ? ' <span class="neutral" title="Fees are estimated (actual Amazon settlement data unavailable)">*</span>'
-            : '';
+    const shown = sorted.slice(0, TABLE_MAX_ROWS);
+    tbody.innerHTML = shown.map(o => `
+        <tr>
+            <td>
+                <span class="mono">${escapeHtml(o.amazon_order_id)}</span>
+                ${o.sku ? `<br><small class="text-muted mono">${escapeHtml(o.sku)}</small>` : ''}
+            </td>
+            <td><span class="badge ${platformBadgeClass(o.platform)}">${escapeHtml(o.platform)}</span></td>
+            <td><span class="badge ${statusBadgeClass(o.status)}">${escapeHtml(o.status)}</span></td>
+            <td class="number">${formatCurrency(o.sale_price)}</td>
+            <td class="number ${profitClassOf(o.profit)}">${formatCurrency(o.profit)}${feeAsterisk(o.fees_estimated)}</td>
+        </tr>
+    `).join('');
 
-        tr.innerHTML = `
-            <td>${escapeHtml(o.amazon_order_id)}<br><small class="neutral">${escapeHtml(o.sku)}</small></td>
-            <td>${escapeHtml(o.platform)}</td>
-            <td><span class="status-badge ${statusClass}">${escapeHtml(o.status)}</span></td>
-            <td>${formatCurrency(o.sale_price)}</td>
-            <td class="${profitClass}">${formatCurrency(o.profit)}${feeNote}</td>
-        `;
-        tbody.appendChild(tr);
-    });
+    setTableFooter('ordersFooter', shown.length, sorted.length);
 }
 
 // ─── Sync ───────────────────────────────────────────────────
@@ -491,13 +661,13 @@ function renderOrders(orders) {
 async function triggerSync() {
     const btn = document.getElementById('syncBtn');
     const icon = btn.querySelector('.sync-icon');
-    const logContainer = document.getElementById('syncLogContainer');
+    const logSection = document.getElementById('syncLogSection');
     const log = document.getElementById('syncLog');
 
     icon.classList.add('spinning');
     btn.disabled = true;
-    logContainer.classList.remove('hidden');
-    log.textContent = "Starting background sync...\n";
+    logSection.classList.remove('hidden');
+    log.textContent = 'Starting background sync...\n';
 
     const finishUi = () => {
         icon.classList.remove('spinning');
@@ -505,19 +675,24 @@ async function triggerSync() {
 
         // Hide log after a few seconds
         setTimeout(() => {
-            logContainer.classList.add('hidden');
+            logSection.classList.add('hidden');
         }, 5000);
     };
 
     // Shared POST + JSON SSE helper from sse.js; onComplete always fires.
     await runCommandStream('sync-dashboard', null, {
         onLog: (text) => {
-            log.textContent += text + "\n";
+            log.textContent += text + '\n';
             log.scrollTop = log.scrollHeight;
         },
         onComplete: (code) => {
             log.textContent += `\nProcess completed with code ${code}\n`;
             finishUi();
+            if (code === 0) {
+                showToast('Sync complete. Data refreshed.', 'success');
+            } else {
+                showToast(`Sync finished with code ${code}. Check the log.`, 'error');
+            }
             // Refresh data
             fetchDashboardData();
         }
@@ -537,7 +712,7 @@ function lookupOrder() {
 
     if (!window.dashboardData || !window.dashboardData.orders) {
         resultContainer.classList.remove('hidden');
-        resultContainer.innerHTML = `<div class="result-error">Dashboard data not loaded yet.</div>`;
+        resultContainer.innerHTML = '<div class="result-error">Dashboard data not loaded yet.</div>';
         return;
     }
 
@@ -548,8 +723,8 @@ function lookupOrder() {
     if (!order) {
         resultContainer.innerHTML = `
             <div class="result-error">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="min-width: 20px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Order not found in synced data. Please run a sync or check the Order ID.
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Order not found in synced data. Run a sync or check the Order ID.
             </div>`;
         return;
     }
@@ -558,48 +733,48 @@ function lookupOrder() {
     const fees = order.amazon_fees;
     const sale_price = order.sale_price;
     const profit = order.profit;
-    const margin = sale_price > 0 ? (profit / sale_price * 100).toFixed(1) + '%' : "N/A";
+    const margin = sale_price > 0 ? (profit / sale_price * 100).toFixed(1) + '%' : 'N/A';
 
-    const statusClass = 'status-' + escapeHtml(order.status);
-    const profitClass = profit > 0 ? 'positive' : (profit < 0 ? 'negative' : 'neutral');
-    const feeEstimatedNote = order.fees_estimated
-        ? ' <span title="Fees are estimated (actual Amazon settlement data unavailable)">*</span>'
-        : '';
+    const profitClass = profitClassOf(profit);
+    const feeNote = feeAsterisk(order.fees_estimated);
 
     resultContainer.innerHTML = `
         <div class="result-grid">
             <div class="result-item">
-                <span class="result-label">Platform & Status</span>
-                <span class="result-val">${escapeHtml(order.platform)} <span class="status-badge ${statusClass}" style="margin-left: 0.5rem;">${escapeHtml(order.status)}</span></span>
+                <span class="result-label">Platform &amp; Status</span>
+                <span class="result-val">
+                    <span class="badge ${platformBadgeClass(order.platform)}">${escapeHtml(order.platform)}</span>
+                    <span class="badge ${statusBadgeClass(order.status)}">${escapeHtml(order.status)}</span>
+                </span>
             </div>
             <div class="result-item">
                 <span class="result-label">Sale Price (Revenue)</span>
-                <span class="result-val">${formatCurrency(sale_price)}</span>
+                <span class="result-val number">${formatCurrency(sale_price)}</span>
             </div>
             <div class="result-item">
                 <span class="result-label">Product Cost (COGS)</span>
-                <span class="result-val">${formatCurrency(order.product_cost)}</span>
+                <span class="result-val number">${formatCurrency(order.product_cost)}</span>
             </div>
             <div class="result-item">
-                <span class="result-label">Amazon / Gateway Fees${feeEstimatedNote}</span>
-                <span class="result-val negative">${formatCurrency(fees)}${feeEstimatedNote}</span>
+                <span class="result-label">Amazon / Gateway Fees${feeNote}</span>
+                <span class="result-val number negative">${formatCurrency(fees)}${feeNote}</span>
             </div>
             <div class="result-item">
                 <span class="result-label">Shipping / Freight Cost</span>
-                <span class="result-val negative">${formatCurrency(order.shipping_cost)}</span>
+                <span class="result-val number negative">${formatCurrency(order.shipping_cost)}</span>
             </div>
             ${order.refunds && order.refunds > 0 ? `
             <div class="result-item">
                 <span class="result-label">Refunds / Adjustments</span>
-                <span class="result-val negative">${formatCurrency(order.refunds)}</span>
+                <span class="result-val number negative">${formatCurrency(order.refunds)}</span>
             </div>` : ''}
             <div class="result-item">
                 <span class="result-label">Net Profit</span>
-                <span class="result-val ${profitClass}">${formatCurrency(profit)}</span>
+                <span class="result-val number ${profitClass}">${formatCurrency(profit)}</span>
             </div>
             <div class="result-item">
                 <span class="result-label">Margin</span>
-                <span class="result-val ${profitClass}">${margin}</span>
+                <span class="result-val number ${profitClass}">${escapeHtml(margin)}</span>
             </div>
         </div>
     `;

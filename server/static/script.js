@@ -1,26 +1,39 @@
-// Navigation
-document.querySelectorAll('nav li').forEach(item => {
-    item.addEventListener('click', () => {
-        // Update active class on nav
-        document.querySelectorAll('nav li').forEach(li => li.classList.remove('active'));
-        item.classList.add('active');
+/**
+ * ShipSense — Shipments page logic.
+ * Depends on sse.js (escapeHtml, apiHeaders, runCommandStream) loaded first.
+ */
 
-        // Show selected view
-        const viewId = item.getAttribute('data-view');
-        document.querySelectorAll('.view').forEach(view => {
-            if (view.id === `view-${viewId}`) {
-                view.classList.remove('hidden');
-            } else {
-                view.classList.add('hidden');
-            }
-        });
+/* --------------------------------------------------------------------------
+   Inline SVG icons (Lucide, 24x24, stroke 1.5, currentColor)
+   -------------------------------------------------------------------------- */
+const ICONS = {
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>',
+    inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>',
+    chevronUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>',
+    chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>'
+};
 
-        if (viewId === 'orders') fetchState();
-        if (viewId === 'dashboard') fetchPendingOrders();
+/* --------------------------------------------------------------------------
+   Tab switching (Pending Orders / All Orders)
+   -------------------------------------------------------------------------- */
+function switchTab(tab) {
+    document.querySelectorAll('.filter-btn[data-tab]').forEach(btn => {
+        const active = btn.dataset.tab === tab;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
     });
-});
 
-// Toast Notification
+    document.getElementById('panel-pending').classList.toggle('hidden', tab !== 'pending');
+    document.getElementById('panel-orders').classList.toggle('hidden', tab !== 'orders');
+
+    if (tab === 'orders') fetchState();
+    if (tab === 'pending') fetchPendingOrders();
+}
+
+/* --------------------------------------------------------------------------
+   Toast notifications (bottom-right, slide-in, auto-dismiss 4s)
+   -------------------------------------------------------------------------- */
 let toastTimeoutId = null;
 
 function showToast(message, type = 'success') {
@@ -28,45 +41,67 @@ function showToast(message, type = 'success') {
     const icon = toast.querySelector('.toast-icon');
     const msg = toast.querySelector('.toast-message');
 
-    icon.textContent = type === 'error' ? '❌' : '✅';
+    toast.classList.remove('toast-success', 'toast-error', 'toast-warning', 'toast-info');
+    toast.classList.add(type === 'error' ? 'toast-error' : 'toast-success');
+    icon.innerHTML = type === 'error' ? ICONS.alert : ICONS.check;
     msg.textContent = message;
 
-    toast.classList.remove('hidden');
+    toast.classList.add('visible');
     if (toastTimeoutId) clearTimeout(toastTimeoutId);
     toastTimeoutId = setTimeout(() => {
-        toast.classList.add('hidden');
+        toast.classList.remove('visible');
         toastTimeoutId = null;
-    }, 3000);
+    }, 4000);
 }
 
-// Terminal Logic
-const terminalOutput = document.getElementById('terminal-output');
+/* --------------------------------------------------------------------------
+   Sync log (collapsible terminal output)
+   -------------------------------------------------------------------------- */
+const syncLogSection = document.getElementById('sync-log-section');
+const syncLogOutput = document.getElementById('sync-log-output');
+let syncLogOpen = false;
 let commandRunning = false;
 
-function appendToTerminal(text, type = '') {
-    const line = document.createElement('div');
-    line.className = `log-line ${type}`;
-    line.textContent = text;
-    terminalOutput.appendChild(line);
-    terminalOutput.scrollTop = terminalOutput.scrollHeight;
-
-    // Auto-color lines based on content
-    if (!type) {
-        if (text.includes('❌') || text.toLowerCase().includes('error') || text.toLowerCase().includes('failed')) {
-            line.classList.add('error');
-        } else if (text.includes('✅') || text.toLowerCase().includes('success')) {
-            line.classList.add('success');
-        } else if (text.includes('⚠️') || text.toLowerCase().includes('skipping')) {
-            line.classList.add('warning');
-        }
+function setSyncLogOpen(open) {
+    syncLogOpen = open;
+    syncLogSection.style.maxHeight = open ? '320px' : '0';
+    const btn = document.getElementById('btn-collapse-log');
+    if (btn) {
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        btn.innerHTML = (open ? ICONS.chevronUp : ICONS.chevronDown) + (open ? ' Collapse' : ' Expand');
     }
 }
 
-function clearTerminal() {
-    terminalOutput.innerHTML = '';
+function toggleSyncLog() {
+    setSyncLogOpen(!syncLogOpen);
 }
 
-// Runs a command through the shared POST + JSON SSE helper (sse.js).
+function appendToTerminal(text, type = '') {
+    const line = document.createElement('div');
+    line.className = type ? `log-${type}` : '';
+    line.textContent = text;
+
+    // Auto-color lines based on content
+    if (!type) {
+        const lower = text.toLowerCase();
+        if (lower.includes('error') || lower.includes('failed')) {
+            line.classList.add('log-error');
+        } else if (lower.includes('success')) {
+            line.classList.add('log-success');
+        }
+    }
+
+    syncLogOutput.appendChild(line);
+    syncLogOutput.scrollTop = syncLogOutput.scrollHeight;
+}
+
+function clearTerminal() {
+    syncLogOutput.innerHTML = '';
+}
+
+/* --------------------------------------------------------------------------
+   Command execution via shared SSE helper (sse.js)
+   -------------------------------------------------------------------------- */
 function runCommand(cmdName, orders = null, onDone = null) {
     if (commandRunning) {
         showToast('A command is already running.', 'error');
@@ -74,15 +109,15 @@ function runCommand(cmdName, orders = null, onDone = null) {
     }
     commandRunning = true;
 
-    // Switch to terminal view
-    document.querySelector('[data-view="terminal"]').click();
-    appendToTerminal(`\n> Running: ${cmdName}${orders ? ' IDs: ' + orders : ''}`, 'cmd');
+    // Slide the sync log open
+    setSyncLogOpen(true);
+    appendToTerminal(`> Running: ${cmdName}${orders ? ' IDs: ' + orders : ''}`, 'time');
 
     runCommandStream(cmdName, orders, {
         onLog: (text) => appendToTerminal(text),
         onComplete: (code) => {
             commandRunning = false;
-            appendToTerminal(`> Process finished with code ${code}`, 'cmd');
+            appendToTerminal(`> Process finished with code ${code}`, 'time');
             if (onDone) {
                 onDone(code);
             } else {
@@ -94,7 +129,8 @@ function runCommand(cmdName, orders = null, onDone = null) {
 }
 
 function runManualPrint() {
-    const id = document.getElementById('manual-print-id').value.trim();
+    const input = document.getElementById('manual-print-id');
+    const id = input.value.trim();
     if (!id) {
         showToast('Please enter an ID', 'error');
         return;
@@ -104,52 +140,113 @@ function runManualPrint() {
         return;
     }
     runCommand(`print-order ${id}`);
-    document.getElementById('manual-print-id').value = '';
+    input.value = '';
 }
 
-// State fetching
+/* --------------------------------------------------------------------------
+   Loading / empty state helpers
+   -------------------------------------------------------------------------- */
+function renderSkeletonRows(tbody, cols) {
+    tbody.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+        const tr = document.createElement('tr');
+        for (let c = 0; c < cols; c++) {
+            const td = document.createElement('td');
+            const bar = document.createElement('div');
+            bar.className = 'skeleton';
+            bar.style.width = (c === 0 ? '60%' : '80%');
+            td.appendChild(bar);
+            tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+    }
+}
+
+function renderEmptyState(tbody, cols, title, text) {
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="${cols}" style="height: auto;">
+                <div class="empty-state">
+                    ${ICONS.inbox}
+                    <div class="empty-state-title">${escapeHtml(title)}</div>
+                    <div class="empty-state-text">${escapeHtml(text)}</div>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+/* --------------------------------------------------------------------------
+   Stat value tween (0 -> value over 300ms)
+   -------------------------------------------------------------------------- */
+function animateStat(id, target) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const end = Number(target) || 0;
+    const duration = 300;
+    const start = performance.now();
+
+    function frame(now) {
+        const t = Math.min((now - start) / duration, 1);
+        el.textContent = Math.round(end * t);
+        if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+}
+
+/* --------------------------------------------------------------------------
+   State fetching (stats + All Orders table)
+   -------------------------------------------------------------------------- */
 async function fetchState() {
+    const tbody = document.getElementById('orders-table-body');
     try {
+        renderSkeletonRows(tbody, 6);
+
         const res = await fetch('/api/state', { headers: apiHeaders() });
         const data = await res.json();
 
         if (data.error) {
             console.error(data.error);
+            renderEmptyState(tbody, 6, 'Could not load orders', String(data.error));
             return;
         }
 
         const orders = data.orders || [];
 
-        // Update Dashboard Stats
-        document.getElementById('stat-total').textContent = orders.length;
-        document.getElementById('stat-synced').textContent = orders.filter(o => o.synced_to_amazon).length;
-        document.getElementById('stat-printed').textContent = orders.filter(o => o.label_printed).length;
+        // Update stat cards (animated)
+        animateStat('stat-total', orders.length);
+        animateStat('stat-synced', orders.filter(o => o.synced_to_amazon).length);
+        animateStat('stat-printed', orders.filter(o => o.label_printed).length);
+        animateStat('stat-errors', orders.filter(o => o.error && o.error !== 'null').length);
 
-        // Count errors
-        const errorCount = orders.filter(o => o.error && o.error !== "null").length;
-        document.getElementById('stat-errors').textContent = errorCount;
-
-        // Populate Table
-        const tbody = document.getElementById('orders-table-body');
+        // Populate table
         tbody.innerHTML = '';
+
+        if (orders.length === 0) {
+            renderEmptyState(tbody, 6, 'No orders yet', 'Run a sync to populate order state.');
+            return;
+        }
 
         // Reverse to show newest first
         [...orders].reverse().forEach(order => {
             const tr = document.createElement('tr');
 
-            // Format badges
             const syncBadge = order.synced_to_amazon
-                ? '<span class="badge badge-green">Yes</span>'
-                : '<span class="badge badge-gray">No</span>';
+                ? '<span class="badge badge-success">Yes</span>'
+                : '<span class="badge badge-warning">No</span>';
 
             const printBadge = order.label_printed
-                ? '<span class="badge badge-green">Yes</span>'
-                : '<span class="badge badge-gray">No</span>';
+                ? '<span class="badge badge-success">Yes</span>'
+                : '<span class="badge badge-warning">No</span>';
+
+            const channel = order.amazon_order_id && order.amazon_order_id.startsWith('LIRIYA')
+                ? 'WooCommerce'
+                : 'Amazon';
 
             tr.innerHTML = `
-                <td style="font-family: monospace;">${escapeHtml(order.amazon_order_id || '-')}</td>
-                <td>${order.amazon_order_id?.startsWith('LIRIYA') ? 'WooCommerce' : 'Amazon'}</td>
-                <td style="font-family: monospace;">${escapeHtml(order.awb_number || '-')}</td>
+                <td class="font-mono">${escapeHtml(order.amazon_order_id || '-')}</td>
+                <td>${escapeHtml(channel)}</td>
+                <td class="font-mono">${escapeHtml(order.awb_number || '-')}</td>
                 <td>${escapeHtml(order.courier_name || '-')}</td>
                 <td>${syncBadge}</td>
                 <td>${printBadge}</td>
@@ -159,25 +256,41 @@ async function fetchState() {
 
     } catch (e) {
         console.error('Failed to fetch state', e);
+        renderEmptyState(tbody, 6, 'Error loading orders', 'Check the server connection and try again.');
     }
 }
 
-// Pending Orders fetching
-async function fetchPendingOrders() {
-    try {
-        const tbody = document.getElementById('pending-orders-body');
-        if (!tbody) return;
+/* --------------------------------------------------------------------------
+   Pending orders
+   -------------------------------------------------------------------------- */
+function statusBadgeClass(status) {
+    const s = String(status || '').toLowerCase();
+    if (s.includes('ship')) return 'badge-success';
+    if (s.includes('cancel')) return 'badge-danger';
+    if (s.includes('pend') || s.includes('process') || s.includes('unship')) return 'badge-warning';
+    return 'badge-info'; // New / unknown
+}
 
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem;">Loading...</td></tr>';
+async function fetchPendingOrders() {
+    const tbody = document.getElementById('pending-orders-body');
+    if (!tbody) return;
+
+    try {
+        renderSkeletonRows(tbody, 6);
 
         const res = await fetch('/api/pending-orders', { headers: apiHeaders() });
         const data = await res.json();
         const orders = data.pending_orders || [];
 
+        if (data.errors && data.errors.length) {
+            data.errors.forEach(err => appendToTerminal(`Pending orders: ${err}`, 'error'));
+        }
+
         tbody.innerHTML = '';
         if (orders.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: #888;">No pending orders found.</td></tr>';
-            document.getElementById('selectAllPending').checked = false;
+            renderEmptyState(tbody, 6, 'No pending orders', 'All orders are shipped. Refresh to check again.');
+            const allCb = document.getElementById('selectAllPending');
+            if (allCb) allCb.checked = false;
             updateSyncButtonState();
             return;
         }
@@ -185,23 +298,21 @@ async function fetchPendingOrders() {
         orders.forEach(order => {
             const tr = document.createElement('tr');
 
-            let sourceBadge = '';
-            if (order.source === 'Amazon') {
-                sourceBadge = '<span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500;">Amazon</span>';
-            } else {
-                sourceBadge = '<span class="badge" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500;">WooCommerce</span>';
-            }
+            const sourceBadge = order.source === 'Amazon'
+                ? '<span class="badge badge-info">Amazon</span>'
+                : '<span class="badge badge-warning">WooCommerce</span>';
 
             const dateStr = order.date ? new Date(order.date).toLocaleString() : '-';
 
             tr.innerHTML = `
-                <td style="padding: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">
-                    <input type="checkbox" class="pending-order-cb" data-source="${escapeHtml(order.source)}" onclick="updateSyncButtonState()">
+                <td>
+                    <input type="checkbox" class="pending-order-cb" data-source="${escapeHtml(order.source)}" onclick="updateSyncButtonState()" aria-label="Select order">
                 </td>
-                <td style="padding: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">${sourceBadge}</td>
-                <td style="font-family: monospace; padding: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">${escapeHtml(order.order_id || '-')}</td>
-                <td style="padding: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">${escapeHtml(dateStr)}</td>
-                <td style="padding: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">${escapeHtml(order.status || '-')}</td>
+                <td>${sourceBadge}</td>
+                <td class="font-mono">${escapeHtml(order.order_id || '-')}</td>
+                <td>${escapeHtml(dateStr)}</td>
+                <td><span class="badge ${statusBadgeClass(order.status)}">${escapeHtml(order.status || '-')}</span></td>
+                <td>${escapeHtml(order.items != null ? order.items : '-')}</td>
             `;
             // Set the checkbox value via the property so untrusted IDs can't
             // break out of the attribute.
@@ -216,18 +327,13 @@ async function fetchPendingOrders() {
 
     } catch (e) {
         console.error('Failed to fetch pending orders', e);
-        const tbody = document.getElementById('pending-orders-body');
-        if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 1rem; color: #ef4444;">Error loading pending orders.</td></tr>';
-        }
+        renderEmptyState(tbody, 6, 'Error loading pending orders', 'Check the server connection and try again.');
     }
 }
 
-// Initial fetch
-fetchState();
-fetchPendingOrders();
-
-// Selection Logic
+/* --------------------------------------------------------------------------
+   Selection logic
+   -------------------------------------------------------------------------- */
 function toggleAllPending(sourceCheckbox) {
     const checkboxes = document.querySelectorAll('.pending-order-cb');
     checkboxes.forEach(cb => cb.checked = sourceCheckbox.checked);
@@ -243,11 +349,9 @@ function updateSyncButtonState() {
     const btn = document.getElementById('btn-sync-selected');
     if (btn) btn.disabled = !anyChecked;
 
-    // Auto-check or uncheck the master select all box
+    // Auto-check or uncheck the select-all box
     const allCb = document.getElementById('selectAllPending');
-    if (allCb) {
-        allCb.checked = allChecked;
-    }
+    if (allCb) allCb.checked = allChecked;
 }
 
 function runSelectedSync() {
@@ -267,10 +371,7 @@ function runSelectedSync() {
 
     if (commandsToRun.length === 0) return;
 
-    // Switch to terminal view
-    document.querySelector('[data-view="terminal"]').click();
-
-    // Run sequentially
+    // Run sequentially (the sync log opens automatically via runCommand)
     runSequentialCommands(commandsToRun);
 }
 
@@ -295,3 +396,9 @@ function runSequentialCommands(commands) {
         }
     });
 }
+
+/* --------------------------------------------------------------------------
+   Init
+   -------------------------------------------------------------------------- */
+fetchState();
+fetchPendingOrders();

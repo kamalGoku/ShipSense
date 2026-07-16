@@ -3,142 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ShipSense Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+    <title>ShipSense — Shipments</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/app.css?v=1">
 </head>
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo-container">
-                <div class="logo-icon">🚀</div>
-                <h2>ShipSense</h2>
+    <div class="app-shell">
+        <!-- Top navigation (shared across pages) -->
+        <header class="top-nav">
+            <div class="nav-inner">
+                <a href="/shipments" class="nav-logo" aria-label="ShipSense home">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"></path><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><line x1="12" x2="12" y1="22" y2="12"></line></svg>
+                    ShipSense
+                </a>
+                <nav class="nav-links" aria-label="Primary">
+                    <a href="/shipments" class="nav-link active" aria-current="page">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"></path><path d="M15 18H9"></path><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"></path><circle cx="17" cy="18" r="2"></circle><circle cx="7" cy="18" r="2"></circle></svg>
+                        <span class="nav-link-text">Shipments</span>
+                    </a>
+                    <a href="/revenue" class="nav-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg>
+                        <span class="nav-link-text">Revenue</span>
+                    </a>
+                </nav>
+                <div class="nav-actions">
+                    <span class="nav-status">
+                        <span class="status-dot" aria-hidden="true"></span>
+                        System Ready
+                    </span>
+                </div>
             </div>
-            <nav>
-                <ul>
-                    <li class="active" data-view="dashboard">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                        Dashboard
-                    </li>
-                    <li data-view="terminal">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                        Terminal Output
-                    </li>
-                    <li data-view="orders">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                        Order State
-                    </li>
-                </ul>
-            </nav>
-            <div class="status-indicator">
-                <span class="dot online"></span>
-                <span class="status-text">System Ready</span>
-            </div>
-        </aside>
+        </header>
 
-        <!-- Main Content -->
+        <!-- Main content -->
         <main class="main-content">
-            <!-- View: Dashboard -->
-            <section id="view-dashboard" class="view active">
-                <header>
-                    <h1>Dashboard</h1>
-                    <p>Manage and monitor your synchronization tasks.</p>
-                </header>
+            <div class="page-header">
+                <div>
+                    <h1>Shipments</h1>
+                    <p class="text-muted text-sm">Manage synchronization and label printing</p>
+                </div>
+            </div>
 
-                <div class="stats-grid">
-                    <div class="stat-card glass">
-                        <div class="stat-title">Total Processed Orders</div>
-                        <div class="stat-value" id="stat-total">0</div>
+            <!-- Stats row -->
+            <section class="cards-grid" aria-label="Shipment statistics">
+                <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                        <span class="stat-title">Total Orders</span>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-muted);" aria-hidden="true"><path d="M16.5 9.4 7.55 4.24"></path><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><line x1="12" x2="12" y1="22" y2="12"></line></svg>
                     </div>
-                    <div class="stat-card glass">
-                        <div class="stat-title">Synced to Amazon</div>
-                        <div class="stat-value text-green" id="stat-synced">0</div>
+                    <div class="stat-value" id="stat-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                        <span class="stat-title">Synced to Amazon</span>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                     </div>
-                    <div class="stat-card glass">
-                        <div class="stat-title">Labels Printed</div>
-                        <div class="stat-value text-blue" id="stat-printed">0</div>
+                    <div class="stat-value" id="stat-synced" style="color: var(--success);">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                        <span class="stat-title">Labels Printed</span>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--info);" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                     </div>
-                    <div class="stat-card glass">
-                        <div class="stat-title">Errors</div>
-                        <div class="stat-value text-red" id="stat-errors">0</div>
+                    <div class="stat-value" id="stat-printed" style="color: var(--info);">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="flex items-center justify-between">
+                        <span class="stat-title">Errors</span>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--destructive);" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+                    </div>
+                    <div class="stat-value" id="stat-errors" style="color: var(--destructive);">0</div>
+                </div>
+            </section>
+
+            <!-- Actions -->
+            <section class="cards-grid mt-2" aria-label="Sync actions">
+                <div class="stat-card">
+                    <h3>Amazon Sync</h3>
+                    <p class="text-muted text-sm">Sync Amazon orders to SP-API and print labels.</p>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-primary" onclick="runCommand('amazon')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M3 21v-5h5"></path></svg>
+                            Run Full Sync
+                        </button>
                     </div>
                 </div>
-
-                <div class="actions-grid">
-                    <div class="action-card glass">
-                        <h3>Amazon Workflow</h3>
-                        <p>Sync Amazon orders to SP-API and print labels.</p>
-                        <button class="btn btn-primary" onclick="runCommand('amazon')">Run Full Sync</button>
-                    </div>
-                    <div class="action-card glass">
-                        <h3>Liriya Workflow</h3>
-                        <p>Process WooCommerce orders, skipping SP-API.</p>
-                        <button class="btn btn-accent" onclick="runCommand('liriya')">Run Liriya Sync</button>
-                    </div>
-
-                    <div class="action-card glass">
-                        <h3>Manual Print</h3>
-                        <p>Force download and print a specific label.</p>
-                        <div class="input-group">
-                            <input type="text" id="manual-print-id" placeholder="Order ID or AWB">
-                            <button class="btn btn-secondary" onclick="runManualPrint()">Print</button>
-                        </div>
+                <div class="stat-card">
+                    <h3>WooCommerce Sync</h3>
+                    <p class="text-muted text-sm">Process WooCommerce (Liriya) orders, skipping SP-API.</p>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-accent" onclick="runCommand('liriya')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M3 21v-5h5"></path></svg>
+                            Run Liriya Sync
+                        </button>
                     </div>
                 </div>
-
-                <div class="pending-orders-section glass" style="margin-top: 2rem; padding: 1.5rem; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);">
-                    <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h3 style="margin: 0;">Pending Orders to Ship</h3>
-                        <div>
-                            <button id="btn-sync-selected" class="btn btn-sm btn-primary" style="margin-right: 0.5rem;" onclick="runSelectedSync()" disabled>Sync Selected</button>
-                            <button class="btn btn-sm btn-secondary" onclick="fetchPendingOrders()">Refresh List</button>
-                        </div>
-                    </header>
-                    <div class="table-container">
-                        <table id="pending-orders-table" style="width: 100%; border-collapse: collapse;">
-                            <thead>
-                                <tr>
-                                    <th style="width: 40px; padding: 0.75rem;"><input type="checkbox" id="selectAllPending" onclick="toggleAllPending(this)"></th>
-                                    <th style="text-align: left; padding: 0.75rem;">Source</th>
-                                    <th style="text-align: left; padding: 0.75rem;">Order ID</th>
-                                    <th style="text-align: left; padding: 0.75rem;">Date</th>
-                                    <th style="text-align: left; padding: 0.75rem;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="pending-orders-body">
-                                <tr>
-                                    <td colspan="5" style="text-align: center; padding: 1rem;">Loading...</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                <div class="stat-card">
+                    <h3>Manual Print</h3>
+                    <p class="text-muted text-sm">Force download and print a specific label.</p>
+                    <div class="search-box mt-2">
+                        <label for="manual-print-id" class="sr-only">Order ID or AWB</label>
+                        <input type="text" id="manual-print-id" class="input" placeholder="Order ID or AWB">
+                        <button type="button" class="btn btn-secondary" onclick="runManualPrint()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                            Print
+                        </button>
                     </div>
                 </div>
             </section>
 
-            <!-- View: Terminal -->
-            <section id="view-terminal" class="view hidden">
-                <header>
-                    <h1>Terminal Output</h1>
-                    <div class="terminal-actions">
-                        <button class="btn btn-sm btn-outline" onclick="clearTerminal()">Clear</button>
+            <!-- Sync log (collapsible; expands when a sync starts) -->
+            <section id="sync-log-section" class="mt-2" style="max-height: 0; overflow: hidden; transition: max-height 300ms ease;" aria-label="Sync log">
+                <div class="flex items-center justify-between" style="margin-bottom: var(--space-2);">
+                    <h3>Sync Log</h3>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-ghost" onclick="clearTerminal()">Clear</button>
+                        <button type="button" id="btn-collapse-log" class="btn btn-sm btn-ghost" onclick="toggleSyncLog()" aria-expanded="false" aria-controls="sync-log-output">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            Expand
+                        </button>
                     </div>
-                </header>
-                <div class="terminal-container glass">
-                    <div class="terminal-window" id="terminal-output">
-                        <div class="log-line text-muted">Awaiting command execution...</div>
-                    </div>
+                </div>
+                <div class="sync-log" id="sync-log-output" role="log" aria-live="polite">
+                    <div class="text-muted">Awaiting command execution...</div>
                 </div>
             </section>
 
-            <!-- View: Orders -->
-            <section id="view-orders" class="view hidden">
-                <header>
-                    <h1>Order State</h1>
-                    <button class="btn btn-sm btn-secondary" onclick="fetchState()">Refresh</button>
-                </header>
-                <div class="table-container glass">
-                    <table id="orders-table">
+            <!-- Tab switcher: Pending Orders / All Orders -->
+            <div class="filter-bar mt-3" role="tablist" aria-label="Order views">
+                <button type="button" class="filter-btn active" data-tab="pending" role="tab" aria-selected="true" aria-controls="panel-pending" onclick="switchTab('pending')">Pending Orders</button>
+                <button type="button" class="filter-btn" data-tab="orders" role="tab" aria-selected="false" aria-controls="panel-orders" onclick="switchTab('orders')">All Orders</button>
+            </div>
+
+            <!-- Panel: Pending Orders -->
+            <section id="panel-pending" role="tabpanel" aria-label="Pending orders">
+                <div class="flex items-center justify-between" style="margin-bottom: var(--space-2);">
+                    <h3>Pending Orders</h3>
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="btn-sync-selected" class="btn btn-sm btn-primary" onclick="runSelectedSync()" disabled>Sync Selected</button>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="fetchPendingOrders()">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M3 21v-5h5"></path></svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="pending-orders-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input type="checkbox" id="selectAllPending" onclick="toggleAllPending(this)" aria-label="Select all pending orders">
+                                </th>
+                                <th>Source</th>
+                                <th>Order ID</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Items</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pending-orders-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Panel: All Orders (Order State) -->
+            <section id="panel-orders" class="hidden" role="tabpanel" aria-label="All orders">
+                <div class="flex items-center justify-between" style="margin-bottom: var(--space-2);">
+                    <h3>Order State</h3>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="fetchState()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M3 21v-5h5"></path></svg>
+                        Refresh
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="orders-table">
                         <thead>
                             <tr>
                                 <th>Order ID</th>
@@ -149,19 +189,17 @@
                                 <th>Printed</th>
                             </tr>
                         </thead>
-                        <tbody id="orders-table-body">
-                            <!-- Rows populated by JS -->
-                        </tbody>
+                        <tbody id="orders-table-body"></tbody>
                     </table>
                 </div>
             </section>
         </main>
     </div>
 
-    <!-- Notification Toast -->
-    <div id="toast" class="toast hidden">
-        <div class="toast-icon"></div>
-        <div class="toast-message"></div>
+    <!-- Toast notification (bottom-right, slides in) -->
+    <div id="toast" class="toast" role="status" aria-live="polite">
+        <span class="toast-icon" aria-hidden="true"></span>
+        <span class="toast-message"></span>
     </div>
 
     <script src="/static/sse.js"></script>

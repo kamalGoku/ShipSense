@@ -3,185 +3,229 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Business Revenue Dashboard</title>
+    <title>ShipSense — Revenue</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="/static/dashboard.css?v=3">
+    <link rel="stylesheet" href="/static/app.css?v=1">
 </head>
 <body>
-    <div class="app-container">
-        <header class="topbar glass">
-            <div class="logo">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="var(--primary)"/>
-                    <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="var(--primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <h1>Revenue Dashboard</h1>
-            </div>
-            <div class="actions">
-                <span id="lastSynced" class="last-synced">Last Synced: Never</span>
-                <button id="syncBtn" class="btn-primary">
-                    <svg class="icon sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
-                    Sync Data
-                </button>
+    <div class="app-shell">
+        <!-- ============ Top navigation (shared across pages) ============ -->
+        <header class="top-nav">
+            <div class="nav-inner">
+                <a href="/revenue" class="nav-logo" aria-label="ShipSense home">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                    ShipSense
+                </a>
+                <nav class="nav-links" aria-label="Primary">
+                    <a href="/shipments" class="nav-link">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+                        <span class="nav-link-text">Shipments</span>
+                    </a>
+                    <a href="/revenue" class="nav-link active" aria-current="page">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                        <span class="nav-link-text">Revenue</span>
+                    </a>
+                </nav>
+                <div class="nav-actions">
+                    <span class="nav-status">
+                        <span class="status-dot" aria-hidden="true"></span>
+                        <span id="lastSynced">Last synced: Never</span>
+                    </span>
+                    <button id="syncBtn" class="btn btn-primary" type="button">
+                        <svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
+                        Sync Data
+                    </button>
+                </div>
             </div>
         </header>
 
-        <main class="dashboard-content">
-            <div id="syncLogContainer" class="sync-log glass hidden">
-                <div class="log-header">
-                    <h3>Syncing Data...</h3>
-                    <div class="loader"></div>
+        <main class="main-content">
+            <!-- ============ Sync log (revealed while syncing) ============ -->
+            <section id="syncLogSection" class="sync-log-section hidden" aria-live="polite">
+                <div class="sync-log-header">
+                    <h3>Syncing data</h3>
+                    <span class="sync-log-spinner" aria-hidden="true"></span>
                 </div>
-                <pre id="syncLog"></pre>
-            </div>
+                <pre id="syncLog" class="sync-log"></pre>
+            </section>
 
-            <!-- TIMELINE FILTER -->
-            <div class="timeline-filter glass">
-                <div class="filter-presets">
+            <!-- ============ Timeline filter ============ -->
+            <section class="filter-section" aria-label="Timeline filter">
+                <div class="filter-bar">
                     <span class="filter-label">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                         Timeline
                     </span>
-                    <button class="filter-btn active" data-range="all">All Time</button>
-                    <button class="filter-btn" data-range="this-month">This Month</button>
-                    <button class="filter-btn" data-range="last-month">Last Month</button>
-                    <button class="filter-btn" data-range="last-2-months">Last 2 Months</button>
-                    <button class="filter-btn" data-range="last-3-months">Last 3 Months</button>
-                    <button class="filter-btn" data-range="last-6-months">Last 6 Months</button>
-                    <button class="filter-btn" data-range="last-year">Last Year</button>
-                    <button class="filter-btn" data-range="custom">Custom</button>
+                    <button class="filter-btn active" type="button" data-range="all">All Time</button>
+                    <button class="filter-btn" type="button" data-range="this-month">This Month</button>
+                    <button class="filter-btn" type="button" data-range="last-month">Last Month</button>
+                    <button class="filter-btn" type="button" data-range="last-2-months">Last 2M</button>
+                    <button class="filter-btn" type="button" data-range="last-3-months">Last 3M</button>
+                    <button class="filter-btn" type="button" data-range="last-6-months">Last 6M</button>
+                    <button class="filter-btn" type="button" data-range="last-year">Last Year</button>
+                    <button class="filter-btn" type="button" data-range="custom">Custom</button>
                 </div>
                 <div id="customDateRange" class="custom-date-range hidden">
-                    <div class="date-input-group">
-                        <label for="dateFrom">From</label>
-                        <input type="date" id="dateFrom" class="date-input">
-                    </div>
-                    <div class="date-input-group">
-                        <label for="dateTo">To</label>
-                        <input type="date" id="dateTo" class="date-input">
-                    </div>
-                    <button id="applyCustomRange" class="btn-primary btn-sm">Apply</button>
+                    <label class="date-field" for="dateFrom">
+                        <span>From</span>
+                        <input type="date" id="dateFrom" class="input">
+                    </label>
+                    <label class="date-field" for="dateTo">
+                        <span>To</span>
+                        <input type="date" id="dateTo" class="input">
+                    </label>
+                    <button id="applyCustomRange" class="btn btn-primary btn-sm" type="button">Apply</button>
                 </div>
-                <div id="activeFilterTag" class="active-filter-tag hidden">
+                <div id="activeFilterTag" class="filter-tag hidden">
                     <span id="filterTagText"></span>
-                    <button id="clearFilter" class="clear-filter-btn" title="Clear filter">✕</button>
+                    <button id="clearFilter" class="filter-tag-clear" type="button" title="Clear filter" aria-label="Clear filter">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
                 </div>
-            </div>
+            </section>
 
-            <!-- SUMMARY CARDS -->
-            <div class="cards-grid">
-                <div class="stat-card glass">
-                    <div class="stat-title">Net Revenue</div>
-                    <div class="stat-value" id="valRevenue">₹0</div>
+            <!-- ============ Summary cards ============ -->
+            <section class="cards-grid" aria-label="Summary">
+                <div class="stat-card">
+                    <div class="stat-head">
+                        <span class="stat-title">Net Revenue</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12"/><path d="M6 8h12"/><path d="m6 13 8.5 8"/><path d="M6 13h3"/><path d="M9 13c6.667 0 6.667-10 0-10"/></svg>
+                    </div>
+                    <div class="stat-value" id="valRevenue">₹0.00</div>
                 </div>
-                <div class="stat-card glass highlight-card">
-                    <div class="stat-title">Net Profit</div>
-                    <div class="stat-value" id="valProfit">₹0</div>
+                <div class="stat-card highlight-card">
+                    <div class="stat-head">
+                        <span class="stat-title">Net Profit</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                    </div>
+                    <div class="stat-value" id="valProfit">₹0.00</div>
                 </div>
-                <div class="stat-card glass">
-                    <div class="stat-title">Total Shipped</div>
+                <div class="stat-card">
+                    <div class="stat-head">
+                        <span class="stat-title">Total Shipped</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+                    </div>
                     <div class="stat-value" id="valShipped">0</div>
                 </div>
-                <div class="stat-card glass">
-                    <div class="stat-title">Total Cancelled</div>
+                <div class="stat-card">
+                    <div class="stat-head">
+                        <span class="stat-title">Total Cancelled</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+                    </div>
                     <div class="stat-value" id="valCancelled">0</div>
                 </div>
-                <div class="stat-card glass">
-                    <div class="stat-title">Shipping Cost</div>
-                    <div class="stat-value" id="valShipping">₹0</div>
+                <div class="stat-card">
+                    <div class="stat-head">
+                        <span class="stat-title">Shipping Cost</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+                    </div>
+                    <div class="stat-value" id="valShipping">₹0.00</div>
                 </div>
-                <div class="stat-card glass">
-                    <div class="stat-title">Total Fees</div>
-                    <div class="stat-value" id="valFees">₹0</div>
+                <div class="stat-card">
+                    <div class="stat-head">
+                        <span class="stat-title">Total Fees</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/></svg>
+                    </div>
+                    <div class="stat-value" id="valFees">₹0.00</div>
                 </div>
-            </div>
+            </section>
 
-            <!-- PLATFORM BREAKDOWN -->
-            <div class="table-container glass" style="margin-bottom: 2rem; max-height: none;">
-                <h2>Platform Performance Breakdown</h2>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Platform</th>
-                            <th>Orders</th>
-                            <th>Shipped</th>
-                            <th>Cancelled</th>
-                            <th>Gross Revenue</th>
-                            <th>Fees / PG Commission</th>
-                            <th>Refund/Cancellation Fees</th>
-                            <th>Shipping Cost</th>
-                            <th>Est. Net Profit</th>
-                        </tr>
-                    </thead>
-                    <tbody id="platformsTbody">
-                        <!-- Populated via JS -->
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- CHARTS -->
-            <div class="charts-grid">
-                <div class="chart-container glass">
-                    <h2>Monthly Revenue & Profit</h2>
-                    <canvas id="monthlyChart"></canvas>
-                </div>
-            </div>
-
-            <!-- ORDER P&L LOOKUP -->
-            <div class="table-container glass" style="margin-bottom: 2rem; max-height: none;">
-                <h2>Order P&L Lookup</h2>
-                <div class="search-container">
-                    <input type="text" id="orderSearchInput" placeholder="Enter Amazon or WooCommerce Order ID" class="search-input">
-                    <button id="orderSearchBtn" class="btn-primary">Lookup</button>
-                </div>
-                <div id="orderSearchResult" class="order-result hidden">
-                    <!-- Populated via JS -->
-                </div>
-            </div>
-
-            <!-- TABLES -->
-            <div class="tables-grid">
-                <div class="table-container glass">
-                    <h2>Top Products</h2>
+            <!-- ============ Platform performance ============ -->
+            <section class="panel" aria-label="Platform performance">
+                <h2 class="panel-title">Platform Performance Breakdown</h2>
+                <div class="table-container">
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>SKU</th>
-                                <th>Units Sold</th>
-                                <th>Revenue</th>
-                                <th>Est. Profit</th>
-                            </tr>
-                        </thead>
-                        <tbody id="productsTbody">
-                            <!-- Populated via JS -->
-                        </tbody>
-                    </table>
-                </div>
-
-                <div class="table-container glass">
-                    <h2>Recent Orders</h2>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Order ID</th>
                                 <th>Platform</th>
-                                <th>Status</th>
-                                <th>Sale Price</th>
-                                <th>Profit</th>
+                                <th class="number">Orders</th>
+                                <th class="number">Shipped</th>
+                                <th class="number">Cancelled</th>
+                                <th class="number">Gross Revenue</th>
+                                <th class="number">Fees / PG Commission</th>
+                                <th class="number">Refund/Cancellation Fees</th>
+                                <th class="number">Shipping Cost</th>
+                                <th class="number">Est. Net Profit</th>
                             </tr>
                         </thead>
-                        <tbody id="ordersTbody">
-                            <!-- Populated via JS -->
-                        </tbody>
+                        <tbody id="platformsTbody"></tbody>
                     </table>
                 </div>
+            </section>
+
+            <!-- ============ Chart ============ -->
+            <section class="chart-container" aria-label="Monthly revenue and profit">
+                <h2 class="chart-title">Monthly Revenue &amp; Profit</h2>
+                <div class="chart-canvas-wrap">
+                    <canvas id="monthlyChart" role="img" aria-label="Line chart of monthly revenue and profit"></canvas>
+                </div>
+            </section>
+
+            <!-- ============ Order P&L lookup ============ -->
+            <section class="panel" aria-label="Order profit and loss lookup">
+                <h2 class="panel-title">Order P&amp;L Lookup</h2>
+                <div class="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <input type="text" id="orderSearchInput" class="input" placeholder="Enter Amazon or WooCommerce Order ID" aria-label="Order ID">
+                    <button id="orderSearchBtn" class="btn btn-primary" type="button">Lookup</button>
+                </div>
+                <div id="orderSearchResult" class="order-result hidden"></div>
+            </section>
+
+            <!-- ============ Side-by-side tables ============ -->
+            <div class="tables-grid">
+                <section class="panel" aria-label="Top products">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Top Products</h2>
+                        <span id="productsApproxNote" class="approx-note hidden">(filtered view — primary SKU basis)</span>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th class="number">Units</th>
+                                    <th class="number">Revenue</th>
+                                    <th class="number">Profit</th>
+                                </tr>
+                            </thead>
+                            <tbody id="productsTbody"></tbody>
+                        </table>
+                    </div>
+                    <div id="productsFooter" class="table-footer hidden"></div>
+                </section>
+
+                <section class="panel" aria-label="Recent orders">
+                    <div class="panel-header">
+                        <h2 class="panel-title">Recent Orders</h2>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Platform</th>
+                                    <th>Status</th>
+                                    <th class="number">Sale ₹</th>
+                                    <th class="number">Profit ₹</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ordersTbody"></tbody>
+                        </table>
+                    </div>
+                    <div id="ordersFooter" class="table-footer hidden"></div>
+                </section>
             </div>
         </main>
     </div>
-    <script src="/static/sse.js?v=3"></script>
-    <script src="/static/dashboard.js?v=3"></script>
+
+    <!-- ============ Toast (bottom-right) ============ -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/static/sse.js?v=4"></script>
+    <script src="/static/dashboard.js?v=4"></script>
 </body>
 </html>
