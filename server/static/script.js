@@ -200,14 +200,14 @@ function animateStat(id, target) {
 async function fetchState() {
     const tbody = document.getElementById('orders-table-body');
     try {
-        renderSkeletonRows(tbody, 6);
+        renderSkeletonRows(tbody, 7);
 
         const res = await fetch('/api/state', { headers: apiHeaders() });
         const data = await res.json();
 
         if (data.error) {
             console.error(data.error);
-            renderEmptyState(tbody, 6, 'Could not load orders', String(data.error));
+            renderEmptyState(tbody, 7, 'Could not load orders', String(data.error));
             return;
         }
 
@@ -223,7 +223,7 @@ async function fetchState() {
         tbody.innerHTML = '';
 
         if (orders.length === 0) {
-            renderEmptyState(tbody, 6, 'No orders yet', 'Run a sync to populate order state.');
+            renderEmptyState(tbody, 7, 'No orders yet', 'Run a sync to populate order state.');
             return;
         }
 
@@ -256,7 +256,7 @@ async function fetchState() {
 
     } catch (e) {
         console.error('Failed to fetch state', e);
-        renderEmptyState(tbody, 6, 'Error loading orders', 'Check the server connection and try again.');
+        renderEmptyState(tbody, 7, 'Error loading orders', 'Check the server connection and try again.');
     }
 }
 
@@ -276,7 +276,7 @@ async function fetchPendingOrders() {
     if (!tbody) return;
 
     try {
-        renderSkeletonRows(tbody, 6);
+        renderSkeletonRows(tbody, 7);
 
         const res = await fetch('/api/pending-orders', { headers: apiHeaders() });
         const data = await res.json();
@@ -288,7 +288,7 @@ async function fetchPendingOrders() {
 
         tbody.innerHTML = '';
         if (orders.length === 0) {
-            renderEmptyState(tbody, 6, 'No pending orders', 'All orders are shipped. Refresh to check again.');
+            renderEmptyState(tbody, 7, 'No pending orders', 'All orders are shipped. Refresh to check again.');
             const allCb = document.getElementById('selectAllPending');
             if (allCb) allCb.checked = false;
             updateSyncButtonState();
@@ -298,9 +298,9 @@ async function fetchPendingOrders() {
         orders.forEach(order => {
             const tr = document.createElement('tr');
 
-            const sourceBadge = order.source === 'Amazon'
-                ? '<span class="badge badge-info">Amazon</span>'
-                : '<span class="badge badge-warning">WooCommerce</span>';
+            const sourceBadge = order.source.toLowerCase().includes('amazon')
+                ? `<span class="badge badge-primary">${escapeHtml(order.source)}</span>`
+                : `<span class="badge badge-warning">${escapeHtml(order.source)}</span>`;
 
             const dateStr = order.date ? new Date(order.date).toLocaleString() : '-';
 
@@ -312,6 +312,7 @@ async function fetchPendingOrders() {
                 <td class="font-mono">${escapeHtml(order.order_id || '-')}</td>
                 <td>${escapeHtml(dateStr)}</td>
                 <td><span class="badge ${statusBadgeClass(order.status)}">${escapeHtml(order.status || '-')}</span></td>
+                <td><span class="badge badge-info">${escapeHtml(order.gateway || '-')}</span></td>
                 <td>${escapeHtml(order.items != null ? order.items : '-')}</td>
             `;
             // Set the checkbox value via the property so untrusted IDs can't
@@ -327,7 +328,7 @@ async function fetchPendingOrders() {
 
     } catch (e) {
         console.error('Failed to fetch pending orders', e);
-        renderEmptyState(tbody, 6, 'Error loading pending orders', 'Check the server connection and try again.');
+        renderEmptyState(tbody, 7, 'Error loading pending orders', 'Check the server connection and try again.');
     }
 }
 
@@ -358,8 +359,8 @@ function runSelectedSync() {
     const checked = Array.from(document.querySelectorAll('.pending-order-cb:checked'));
     if (checked.length === 0) return;
 
-    const amazonIds = checked.filter(cb => cb.dataset.source === 'Amazon').map(cb => cb.value);
-    const wooIds = checked.filter(cb => cb.dataset.source === 'WooCommerce').map(cb => cb.value);
+    const amazonIds = checked.filter(cb => cb.dataset.source.toLowerCase().includes('amazon')).map(cb => cb.value);
+    const wooIds = checked.filter(cb => !cb.dataset.source.toLowerCase().includes('amazon')).map(cb => cb.value);
 
     const commandsToRun = [];
     if (amazonIds.length > 0) {

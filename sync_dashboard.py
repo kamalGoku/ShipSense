@@ -366,7 +366,8 @@ def _sync_woocommerce_to_db(order_db) -> None:
                 updated_at=updated_at,
                 items=line_items,
                 finances={
-                    "total": woo_order.get("total", "0.0")
+                    "total": woo_order.get("total", "0.0"),
+                    "gateway": woo_order.get("payment_method_title", woo_order.get("payment_method", "Unknown"))
                 }
             )
         except Exception as e:

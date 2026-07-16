@@ -2,6 +2,7 @@ import asyncio
 import fcntl
 import hmac
 import json
+import sqlite3
 import os
 import re
 import sys
@@ -334,20 +335,47 @@ async def get_pending_orders_api():
 
     for o in amz_orders or []:
         pending.append({
-            "source": "Amazon",
+            "source": config.AMAZON_PLATFORM_KEY,
             "order_id": o.get("amazon_order_id"),
             "status": o.get("status"),
             "date": o.get("created_at"),
             "items": o.get("items_unshipped"),
+            "gateway": "Amazon",
         })
 
+    # Fetch WooCommerce payment gateways and items from orders DB cache
+    woo_order_ids = [str(o.get("channel_order_id") or o.get("id")) for o in sr_woo_orders or []]
+    woo_extra = {}
+    if woo_order_ids:
+        try:
+            db_path = os.path.join(ROOT_DIR, "freight", "orders_data.db")
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
+                placeholders = ",".join(["?"] * len(woo_order_ids))
+                cursor.execute(f"SELECT order_id, finances_json, items_json FROM orders WHERE order_id IN ({placeholders})", woo_order_ids)
+                for row in cursor.fetchall():
+                    extra = {"gateway": "WooCommerce", "items": "N/A"}
+                    if row[1]:
+                        finances = json.loads(row[1])
+                        extra["gateway"] = finances.get("gateway", "WooCommerce")
+                    if row[2]:
+                        items = json.loads(row[2])
+                        total_qty = sum(item.get("quantity", 1) for item in items)
+                        extra["items"] = str(total_qty)
+                    woo_extra[str(row[0])] = extra
+        except Exception as e:
+            errors.append(f"DB Error: {e}")
+
     for o in sr_woo_orders or []:
+        woo_id = str(o.get("channel_order_id") or o.get("id"))
+        extra_data = woo_extra.get(woo_id, {})
         pending.append({
-            "source": "WooCommerce",
-            "order_id": o.get("channel_order_id") or o.get("id"),
+            "source": config.WOO_PLATFORM_KEY,
+            "order_id": woo_id,
             "status": o.get("status"),
             "date": o.get("created_at"),
-            "items": "N/A",  # Shiprocket check_new_orders doesn't easily expose item count at top level
+            "items": extra_data.get("items", "N/A"),
+            "gateway": extra_data.get("gateway", "WooCommerce"),
         })
 
     # Sort by date descending using a tolerant parser (dates arrive in mixed formats)
