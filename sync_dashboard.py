@@ -365,7 +365,9 @@ def _sync_woocommerce_to_db(order_db) -> None:
                 created_at=created_at,
                 updated_at=updated_at,
                 items=line_items,
-                finances=None  # No separate finances API for Woo; totals come from line items
+                finances={
+                    "total": woo_order.get("total", "0.0")
+                }
             )
         except Exception as e:
             logger.error(f"❌ Failed to process WooCommerce order {woo_id}: {e}")
@@ -474,10 +476,13 @@ def _normalize_woo_order(order, product_costs, freight_costs, awb_index) -> dict
     is_cancelled = status == 'Canceled'
 
     line_items = order['items'] or []
+    finances = order.get('finances') or {}
 
-    # WooCommerce line items carry 'total' (line revenue) as a string;
-    # the order's sale price is the sum of line totals.
-    sale_price = sum(float(i.get('total', 0.0)) for i in line_items)
+    # Use the full gross order total if we captured it, otherwise fallback to item sum.
+    if 'total' in finances:
+        sale_price = float(finances['total'])
+    else:
+        sale_price = sum(float(i.get('total', 0.0)) for i in line_items)
     product_cost = sum(product_costs.get(i.get("sku"), 0.0) * int(i.get("quantity", 1)) for i in line_items)
 
     # Payment gateway fee on WooCommerce payments
