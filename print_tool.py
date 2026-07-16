@@ -1,6 +1,8 @@
 import subprocess
 import os
 import sys
+
+import config
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -14,20 +16,31 @@ def list_printers():
     except subprocess.CalledProcessError as e:
         logger.error(f"❌ Error listing printers: {e}")
 
-PRINTER_MAC = "e0:bb:9e:83:1a:02"
+def get_printer_options(printer_name):
+    """Print the CUPS options supported by a printer (lpoptions -p <name> -l)."""
+    try:
+        result = subprocess.run(
+            ["lpoptions", "-p", printer_name, "-l"],
+            capture_output=True, text=True, check=True,
+        )
+        logger.info(f"🖨️ Options for printer '{printer_name}':")
+        print(result.stdout)
+        return result.stdout
+    except subprocess.CalledProcessError as e:
+        logger.error(f"❌ Error listing options for '{printer_name}': {e.stderr}")
+        return None
 
 def discover_printer_ip():
     """Finds the printer's IP address on the network using its MAC address."""
-    logger.info(f"🔍 Searching for printer with MAC {PRINTER_MAC}...")
+    logger.info(f"🔍 Searching for printer with MAC {config.PRINTER_MAC}...")
     try:
         # 1. Refresh ARP table by pinging the subnet
-        # We assume the user is on 192.168.29.x based on previous research
-        subprocess.run(["fping", "-a", "-g", "192.168.29.0/24", "-q"], capture_output=True)
+        subprocess.run(["fping", "-a", "-g", config.PRINTER_SUBNET, "-q"], capture_output=True)
         
         # 2. Check ARP table
         result = subprocess.run(["arp", "-an"], capture_output=True, text=True, check=True)
         for line in result.stdout.splitlines():
-            if PRINTER_MAC in line.lower():
+            if config.PRINTER_MAC.lower() in line.lower():
                 # Example: ? (192.168.29.105) at e0:bb:9e:83:1a:02 on en0 ifscope [ethernet]
                 parts = line.split()
                 if len(parts) > 1:

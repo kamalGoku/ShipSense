@@ -5,6 +5,14 @@ from logger import get_logger
 
 logger = get_logger(__name__)
 
+# A6 label crop box (points, 1/72 inch): the region of the Shiprocket A4
+# label PDF that contains the actual A6 shipping label. Used as the default
+# crop/extract rectangle when batch-processing label folders.
+LABEL_CROP_X0 = 5
+LABEL_CROP_Y0 = 5
+LABEL_CROP_X1 = 425
+LABEL_CROP_Y1 = 590
+
 def crop_pdf(input_path, output_path, x0, y0, x1, y1, page_num=0):
     """
     Crops a PDF page to the specified coordinates.
@@ -59,7 +67,8 @@ def extract_image(input_path, output_path, x0, y0, x1, y1, page_num=0, dpi=300):
     logger.info(f"✅ Extraction saved as image: {output_path}")
     return True
 
-def process_folder(folder_path, x0=5, y0=5, x1=425, y1=590):
+def process_folder(folder_path, x0=LABEL_CROP_X0, y0=LABEL_CROP_Y0,
+                   x1=LABEL_CROP_X1, y1=LABEL_CROP_Y1):
     """
     Processes all PDF files in a folder and saves them as images.
     Uses specific coordinates for cropping/screenshotting.

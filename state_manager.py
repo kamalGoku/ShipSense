@@ -10,6 +10,8 @@ import os
 import tempfile
 from datetime import datetime, timezone, timedelta
 
+import config
+
 IST = timezone(timedelta(hours=5, minutes=30))
 
 DEFAULT_STATE = {
@@ -17,7 +19,9 @@ DEFAULT_STATE = {
     "orders": []
 }
 
-STATE_FILE = os.getenv("STATE_FILE_PATH", "./sync_state.json")
+STATE_FILE = config.STATE_FILE_PATH
+
+_INVALID_AWB_VALUES = ("None", "", "No AWB")
 
 
 def load_state(path: str | None = None) -> dict:
@@ -48,10 +52,12 @@ def save_state(state: dict, path: str | None = None) -> None:
 def merge_orders(state: dict, new_orders: list[dict]) -> int:
     """
     Upsert orders by shiprocket_order_id.
-    Preserves existing synced_to_amazon status.
+    Preserves existing synced_to_amazon status, EXCEPT when the AWB number
+    changes to a different non-empty value: the shipment was reassigned, so
+    the order is reset to be re-pushed to Amazon and its label reprinted.
     Returns count of newly added orders.
     """
-    existing_ids = {o["shiprocket_order_id"] for o in state["orders"]}
+    existing_ids = {str(o["shiprocket_order_id"]) for o in state["orders"]}
     added = 0
     for order in new_orders:
         sid = str(order.get("shiprocket_order_id", ""))
@@ -76,14 +82,27 @@ def merge_orders(state: dict, new_orders: list[dict]) -> int:
         else:
             # Update AWB / courier if they changed, provided they are valid
             for existing in state["orders"]:
-                if existing["shiprocket_order_id"] == sid:
+                if str(existing["shiprocket_order_id"]) == sid:
                     new_awb = order.get("awb_number")
                     new_courier = order.get("courier_name")
-                    
-                    if new_awb and str(new_awb) not in ["None", "", "No AWB"]:
-                        existing["awb_number"] = str(new_awb)
+
+                    if new_awb and str(new_awb) not in _INVALID_AWB_VALUES:
+                        new_awb = str(new_awb)
+                        old_awb = str(existing.get("awb_number") or "")
+                        if (old_awb and old_awb not in _INVALID_AWB_VALUES
+                                and new_awb != old_awb):
+                            # AWB reassigned: the old tracking number is dead.
+                            # Re-push the new AWB to Amazon and reprint label.
+                            existing["synced_to_amazon"] = False
+                            existing["synced_at"] = None
+                            existing["label_printed"] = False
+                            existing["printed_at"] = None
+                        existing["awb_number"] = new_awb
                     if new_courier and str(new_courier) not in ["None", ""]:
                         existing["courier_name"] = str(new_courier)
+                    # Successful data refresh for this order: stale errors no
+                    # longer describe the current data.
+                    existing["error"] = None
                     break
     return added
 
@@ -94,10 +113,10 @@ def get_pending_orders(state: dict) -> list[dict]:
     for o in state["orders"]:
         if o.get("synced_to_amazon"):
             continue
-            
+
         awb = str(o.get("awb_number", "")).strip()
         courier = str(o.get("courier_name", "")).strip()
-        
+
         # Valid AWB check: not empty, not "None", not "No AWB"
         if awb and awb not in ["None", "No AWB", ""]:
             # Also ensure we have a courier name
@@ -109,7 +128,7 @@ def get_pending_orders(state: dict) -> list[dict]:
 def mark_synced(state: dict, shiprocket_order_id: str) -> None:
     """Flag an order as successfully synced to Amazon."""
     for order in state["orders"]:
-        if order["shiprocket_order_id"] == str(shiprocket_order_id):
+        if str(order["shiprocket_order_id"]) == str(shiprocket_order_id):
             order["synced_to_amazon"] = True
             order["synced_at"] = datetime.now(IST).isoformat()
             order["error"] = None
@@ -119,7 +138,7 @@ def mark_synced(state: dict, shiprocket_order_id: str) -> None:
 def mark_error(state: dict, shiprocket_order_id: str, error_msg: str) -> None:
     """Record an error for an order (does NOT set synced_to_amazon)."""
     for order in state["orders"]:
-        if order["shiprocket_order_id"] == str(shiprocket_order_id):
+        if str(order["shiprocket_order_id"]) == str(shiprocket_order_id):
             order["error"] = error_msg
             break
 
@@ -127,7 +146,7 @@ def mark_error(state: dict, shiprocket_order_id: str, error_msg: str) -> None:
 def mark_printed(state: dict, amazon_order_id: str) -> None:
     """Flag an order label as successfully printed."""
     for order in state["orders"]:
-        if order["amazon_order_id"] == str(amazon_order_id):
+        if str(order["amazon_order_id"]) == str(amazon_order_id):
             order["label_printed"] = True
             order["printed_at"] = datetime.now(IST).isoformat()
             break

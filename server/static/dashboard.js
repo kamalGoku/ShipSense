@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchDashboardData();
 
     document.getElementById('syncBtn').addEventListener('click', triggerSync);
-    
+
     document.getElementById('orderSearchBtn').addEventListener('click', lookupOrder);
     document.getElementById('orderSearchInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
@@ -14,11 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const range = btn.dataset.range;
-            
+
             // Toggle active state
             document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
+
             // Show/hide custom date range
             const customPanel = document.getElementById('customDateRange');
             if (range === 'custom') {
@@ -34,11 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Custom date range apply
     document.getElementById('applyCustomRange').addEventListener('click', () => {
-        const from = document.getElementById('dateFrom').value;
-        const to = document.getElementById('dateTo').value;
-        if (from && to) {
-            applyDateFilter(new Date(from), endOfDay(new Date(to)), `${formatDateShort(new Date(from))} – ${formatDateShort(new Date(to))}`);
-        }
+        applyCustomRangeFromInputs();
     });
 
     // Clear filter
@@ -55,8 +51,19 @@ let monthlyChartInstance = null;
 // ─── Helpers ────────────────────────────────────────────────
 
 function formatCurrency(amount) {
-    if (amount === "N/A" || isNaN(amount)) return "N/A";
-    return '₹' + parseFloat(amount).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    const n = parseFloat(amount);
+    if (amount === null || amount === undefined || isNaN(n)) return '₹0.00';
+    return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// Parse an <input type="date"> value ("YYYY-MM-DD") as a LOCAL date.
+// new Date("2026-07-01") would parse as UTC midnight and shift the day
+// in non-UTC timezones; constructing from parts avoids that.
+function parseLocalDate(dateInputValue) {
+    if (!dateInputValue) return null;
+    const parts = dateInputValue.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
 }
 
 function endOfDay(date) {
@@ -73,6 +80,16 @@ function startOfDay(date) {
 
 function formatDateShort(date) {
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function applyCustomRangeFromInputs() {
+    const from = parseLocalDate(document.getElementById('dateFrom').value);
+    const to = parseLocalDate(document.getElementById('dateTo').value);
+    if (from && to) {
+        applyDateFilter(startOfDay(from), endOfDay(to), `${formatDateShort(from)} – ${formatDateShort(to)}`);
+        return true;
+    }
+    return false;
 }
 
 // ─── Date Range Calculations ────────────────────────────────
@@ -118,9 +135,10 @@ function getDateRange(rangeKey) {
 function applyPresetFilter(rangeKey) {
     const range = getDateRange(rangeKey);
     if (!range) {
-        // "All Time" — render unfiltered
+        // "All Time" — render the server-computed aggregates (authoritative:
+        // they cover ALL line items, not just each order's primary SKU).
         showFilterTag(null);
-        renderFromOrders(window.dashboardData.orders);
+        renderFromServerData();
     } else {
         applyDateFilter(range.from, range.to, range.label);
     }
@@ -135,7 +153,7 @@ function applyDateFilter(from, to, label) {
         return d >= from && d <= to;
     });
 
-    showFilterTag(`${label}  •  ${filtered.length} order${filtered.length !== 1 ? 's' : ''}`);
+    showFilterTag(`${label}  •  ${filtered.length} order${filtered.length !== 1 ? 's' : ''}  •  approximate (primary SKU basis)`);
     renderFromOrders(filtered);
 }
 
@@ -150,7 +168,26 @@ function showFilterTag(text) {
     }
 }
 
+// ─── Render (unfiltered) from server-computed aggregates ────
+
+function renderFromServerData() {
+    const data = window.dashboardData;
+    if (!data) return;
+
+    updateSummary({
+        last_synced: data.last_synced,
+        summary: data.summary || {}
+    });
+    renderPlatformBreakdown(data.platform_breakdown || {});
+    renderChart((data.monthly || []).slice());
+    renderProducts((data.products || []).slice(), false);
+    renderOrders(data.orders || []);
+}
+
 // ─── Recompute & Render All Sections from Orders ────────────
+// Used ONLY for date-range filtered views. The orders[] array carries one
+// row per order with its PRIMARY SKU only, so per-product units/revenue are
+// approximate; the UI labels these views "approximate (primary SKU basis)".
 
 function renderFromOrders(orders) {
     // Recompute summary
@@ -207,7 +244,7 @@ function renderFromOrders(orders) {
             if (o.status === 'Canceled') monthlyMap[mk].cancelled++;
         }
 
-        // Products (simplified — we only have the primary SKU per order here)
+        // Products (approximate — we only have the primary SKU per order here)
         const sku = o.sku || 'UNKNOWN';
         if (!productsMap[sku]) {
             productsMap[sku] = { sku: sku, name: '', units_sold: 0, revenue: 0, profit: 0 };
@@ -235,12 +272,12 @@ function renderFromOrders(orders) {
 
     // Render everything
     updateSummary({
-        last_synced: window.dashboardData.last_synced,
+        last_synced: window.dashboardData ? window.dashboardData.last_synced : null,
         summary: summary
     });
     renderPlatformBreakdown(platformBreakdown);
     renderChart(Object.values(monthlyMap));
-    renderProducts(Object.values(productsMap));
+    renderProducts(Object.values(productsMap), true);
     renderOrders(orders);
 }
 
@@ -248,38 +285,34 @@ function renderFromOrders(orders) {
 
 async function fetchDashboardData() {
     try {
-        const response = await fetch('/api/dashboard');
+        const response = await fetch('/api/dashboard', { headers: apiHeaders() });
         const data = await response.json();
-        
+
         if (data.error) {
             console.warn(data.error);
             return;
         }
-        
+
         window.dashboardData = data;
-        
+
         // Re-apply whatever filter is currently active
         const activeBtn = document.querySelector('.filter-btn.active');
         const activeRange = activeBtn ? activeBtn.dataset.range : 'all';
 
         if (activeRange === 'custom') {
-            const from = document.getElementById('dateFrom').value;
-            const to = document.getElementById('dateTo').value;
-            if (from && to) {
-                applyDateFilter(new Date(from), endOfDay(new Date(to)), `${formatDateShort(new Date(from))} – ${formatDateShort(new Date(to))}`);
-            } else {
-                renderFromOrders(data.orders);
+            if (!applyCustomRangeFromInputs()) {
+                renderFromServerData();
             }
         } else {
             applyPresetFilter(activeRange);
         }
-        
+
         // Auto-refresh search lookup if an order ID is already typed in
         const searchInput = document.getElementById('orderSearchInput');
         if (searchInput && searchInput.value.trim()) {
             lookupOrder();
         }
-        
+
     } catch (e) {
         console.error("Error fetching dashboard data:", e);
     }
@@ -288,29 +321,31 @@ async function fetchDashboardData() {
 // ─── Rendering Functions ────────────────────────────────────
 
 function updateSummary(data) {
-    document.getElementById('lastSynced').textContent = `Last Synced: ${new Date(data.last_synced).toLocaleString()}`;
-    
-    document.getElementById('valRevenue').textContent = formatCurrency(data.summary.total_revenue);
-    document.getElementById('valProfit').textContent = formatCurrency(data.summary.total_profit);
-    document.getElementById('valShipped').textContent = data.summary.total_shipped;
-    document.getElementById('valCancelled').textContent = data.summary.total_cancelled;
-    document.getElementById('valShipping').textContent = formatCurrency(data.summary.total_shipping_cost);
-    document.getElementById('valFees').textContent = formatCurrency(data.summary.total_amazon_fees);
+    const synced = data.last_synced ? new Date(data.last_synced).toLocaleString() : 'Never';
+    document.getElementById('lastSynced').textContent = `Last Synced: ${synced}`;
+
+    const s = data.summary || {};
+    document.getElementById('valRevenue').textContent = formatCurrency(s.total_revenue);
+    document.getElementById('valProfit').textContent = formatCurrency(s.total_profit);
+    document.getElementById('valShipped').textContent = s.total_shipped || 0;
+    document.getElementById('valCancelled').textContent = s.total_cancelled || 0;
+    document.getElementById('valShipping').textContent = formatCurrency(s.total_shipping_cost);
+    document.getElementById('valFees').textContent = formatCurrency(s.total_amazon_fees);
 }
 
 function renderPlatformBreakdown(breakdown) {
     const tbody = document.getElementById('platformsTbody');
     tbody.innerHTML = '';
-    
+
     if (!breakdown) return;
-    
+
     for (const [platformName, p] of Object.entries(breakdown)) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><strong>${platformName}</strong></td>
-            <td>${p.orders}</td>
-            <td>${p.shipped}</td>
-            <td>${p.cancelled}</td>
+            <td><strong>${escapeHtml(platformName)}</strong></td>
+            <td>${escapeHtml(p.orders)}</td>
+            <td>${escapeHtml(p.shipped)}</td>
+            <td>${escapeHtml(p.cancelled)}</td>
             <td>${formatCurrency(p.revenue)}</td>
             <td>${formatCurrency(p.fees)}</td>
             <td class="negative">${p.cancellation_fees ? formatCurrency(p.cancellation_fees) : '₹0.00'}</td>
@@ -322,11 +357,27 @@ function renderPlatformBreakdown(breakdown) {
 }
 
 function renderChart(monthlyData) {
-    const ctx = document.getElementById('monthlyChart').getContext('2d');
-    
+    const canvas = document.getElementById('monthlyChart');
+    if (!canvas) return;
+
+    // Guard: Chart.js is loaded from a CDN and may be unavailable (offline,
+    // CDN failure). Degrade gracefully so table rendering still proceeds.
+    if (typeof Chart === 'undefined') {
+        const container = canvas.parentElement;
+        if (container && !container.querySelector('.chart-unavailable-note')) {
+            const note = document.createElement('p');
+            note.className = 'chart-unavailable-note neutral';
+            note.textContent = 'Chart unavailable (Chart.js failed to load).';
+            container.appendChild(note);
+        }
+        return;
+    }
+
+    const ctx = canvas.getContext('2d');
+
     // Sort by month
     monthlyData.sort((a, b) => a.month.localeCompare(b.month));
-    
+
     const labels = monthlyData.map(d => d.month);
     const revenue = monthlyData.map(d => d.revenue);
     const profit = monthlyData.map(d => d.profit);
@@ -380,18 +431,21 @@ function renderChart(monthlyData) {
     });
 }
 
-function renderProducts(products) {
+function renderProducts(products, approximate) {
     const tbody = document.getElementById('productsTbody');
     tbody.innerHTML = '';
-    
+
     // Sort by revenue
-    products.sort((a, b) => b.revenue - a.revenue);
-    
+    products.sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+
     products.slice(0, 10).forEach(p => {
         const tr = document.createElement('tr');
+        const approxMark = approximate
+            ? ' <span class="neutral" title="Approximate: computed from each order’s primary SKU only">*</span>'
+            : '';
         tr.innerHTML = `
-            <td>${p.sku}<br><small class="neutral">${p.name || ''}</small></td>
-            <td>${p.units_sold}</td>
+            <td>${escapeHtml(p.sku)}${approxMark}<br><small class="neutral">${escapeHtml(p.name || '')}</small></td>
+            <td>${escapeHtml(p.units_sold)}</td>
             <td>${formatCurrency(p.revenue)}</td>
             <td class="${p.profit > 0 ? 'positive' : (p.profit < 0 ? 'negative' : 'neutral')}">${formatCurrency(p.profit)}</td>
         `;
@@ -402,7 +456,7 @@ function renderProducts(products) {
 function renderOrders(orders) {
     const tbody = document.getElementById('ordersTbody');
     tbody.innerHTML = '';
-    
+
     // Sort by date descending, then show last 50
     const sorted = [...orders].sort((a, b) => {
         if (!a.date && !b.date) return 0;
@@ -413,15 +467,20 @@ function renderOrders(orders) {
 
     sorted.slice(0, 50).forEach(o => {
         const tr = document.createElement('tr');
-        const statusClass = 'status-' + o.status;
+        const statusClass = 'status-' + escapeHtml(o.status);
         const profitClass = o.profit > 0 ? 'positive' : (o.profit < 0 ? 'negative' : 'neutral');
-        
+        // fees_estimated: backend flag meaning the fees are an estimate,
+        // not actual settlement data — surface it with an asterisk/tooltip.
+        const feeNote = o.fees_estimated
+            ? ' <span class="neutral" title="Fees are estimated (actual Amazon settlement data unavailable)">*</span>'
+            : '';
+
         tr.innerHTML = `
-            <td>${o.amazon_order_id}<br><small class="neutral">${o.sku}</small></td>
-            <td>${o.platform}</td>
-            <td><span class="status-badge ${statusClass}">${o.status}</span></td>
+            <td>${escapeHtml(o.amazon_order_id)}<br><small class="neutral">${escapeHtml(o.sku)}</small></td>
+            <td>${escapeHtml(o.platform)}</td>
+            <td><span class="status-badge ${statusClass}">${escapeHtml(o.status)}</span></td>
             <td>${formatCurrency(o.sale_price)}</td>
-            <td class="${profitClass}">${formatCurrency(o.profit)}</td>
+            <td class="${profitClass}">${formatCurrency(o.profit)}${feeNote}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -434,56 +493,35 @@ async function triggerSync() {
     const icon = btn.querySelector('.sync-icon');
     const logContainer = document.getElementById('syncLogContainer');
     const log = document.getElementById('syncLog');
-    
+
     icon.classList.add('spinning');
     btn.disabled = true;
     logContainer.classList.remove('hidden');
     log.textContent = "Starting background sync...\n";
-    
-    try {
-        const response = await fetch('/api/run?cmd=sync-dashboard');
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
 
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value);
-            const events = chunk.split("\n\n");
-            
-            for (const event of events) {
-                if (event.startsWith("data: ")) {
-                    const jsonStr = event.substring(6);
-                    try {
-                        const data = JSON.parse(jsonStr);
-                        if (data.text === "[PROCESS_COMPLETE]") {
-                            log.textContent += `\nProcess completed with code ${data.code}\n`;
-                            // Refresh data
-                            fetchDashboardData();
-                            break;
-                        } else {
-                            log.textContent += data.text + "\n";
-                            log.scrollTop = log.scrollHeight;
-                        }
-                    } catch (e) {
-                        // ignore parse errors
-                    }
-                }
-            }
-        }
-    } catch (e) {
-        console.error(e);
-        log.textContent += "\nError executing sync: " + e.message;
-    } finally {
+    const finishUi = () => {
         icon.classList.remove('spinning');
         btn.disabled = false;
-        
+
         // Hide log after a few seconds
         setTimeout(() => {
             logContainer.classList.add('hidden');
         }, 5000);
-    }
+    };
+
+    // Shared POST + JSON SSE helper from sse.js; onComplete always fires.
+    await runCommandStream('sync-dashboard', null, {
+        onLog: (text) => {
+            log.textContent += text + "\n";
+            log.scrollTop = log.scrollHeight;
+        },
+        onComplete: (code) => {
+            log.textContent += `\nProcess completed with code ${code}\n`;
+            finishUi();
+            // Refresh data
+            fetchDashboardData();
+        }
+    });
 }
 
 // ─── Order P&L Lookup ───────────────────────────────────────
@@ -491,12 +529,12 @@ async function triggerSync() {
 function lookupOrder() {
     const searchInput = document.getElementById('orderSearchInput').value.trim();
     const resultContainer = document.getElementById('orderSearchResult');
-    
+
     if (!searchInput) {
         resultContainer.classList.add('hidden');
         return;
     }
-    
+
     if (!window.dashboardData || !window.dashboardData.orders) {
         resultContainer.classList.remove('hidden');
         resultContainer.innerHTML = `<div class="result-error">Dashboard data not loaded yet.</div>`;
@@ -504,9 +542,9 @@ function lookupOrder() {
     }
 
     const order = window.dashboardData.orders.find(o => String(o.amazon_order_id) === searchInput);
-    
+
     resultContainer.classList.remove('hidden');
-    
+
     if (!order) {
         resultContainer.innerHTML = `
             <div class="result-error">
@@ -521,15 +559,18 @@ function lookupOrder() {
     const sale_price = order.sale_price;
     const profit = order.profit;
     const margin = sale_price > 0 ? (profit / sale_price * 100).toFixed(1) + '%' : "N/A";
-    
-    const statusClass = 'status-' + order.status;
+
+    const statusClass = 'status-' + escapeHtml(order.status);
     const profitClass = profit > 0 ? 'positive' : (profit < 0 ? 'negative' : 'neutral');
+    const feeEstimatedNote = order.fees_estimated
+        ? ' <span title="Fees are estimated (actual Amazon settlement data unavailable)">*</span>'
+        : '';
 
     resultContainer.innerHTML = `
         <div class="result-grid">
             <div class="result-item">
                 <span class="result-label">Platform & Status</span>
-                <span class="result-val">${order.platform} <span class="status-badge ${statusClass}" style="margin-left: 0.5rem;">${order.status}</span></span>
+                <span class="result-val">${escapeHtml(order.platform)} <span class="status-badge ${statusClass}" style="margin-left: 0.5rem;">${escapeHtml(order.status)}</span></span>
             </div>
             <div class="result-item">
                 <span class="result-label">Sale Price (Revenue)</span>
@@ -540,8 +581,8 @@ function lookupOrder() {
                 <span class="result-val">${formatCurrency(order.product_cost)}</span>
             </div>
             <div class="result-item">
-                <span class="result-label">Amazon / Gateway Fees</span>
-                <span class="result-val negative">${formatCurrency(fees)}</span>
+                <span class="result-label">Amazon / Gateway Fees${feeEstimatedNote}</span>
+                <span class="result-val negative">${formatCurrency(fees)}${feeEstimatedNote}</span>
             </div>
             <div class="result-item">
                 <span class="result-label">Shipping / Freight Cost</span>
